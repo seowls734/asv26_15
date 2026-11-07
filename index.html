@@ -237,6 +237,8 @@
   #coins, .wallet { margin-top: .3em; font-size: .85em; color: #ffe14d; text-shadow: .1em .1em 0 #000; }
   .wallet { margin: 0 0 .4em; }
   /* ---------- shop ---------- */
+  #shopTabs { flex-wrap: wrap; justify-content: center; margin: 0 0 .3em; }
+  #shopTabs .btn { font-size: .8em; padding: .25em .8em; margin: .1em; }
   #shopList { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45em; width: 100%; max-width: 62em; }
   .icard { background: #2a1f3d; border: .2em solid #000; padding: .4em .5em; font-size: .7em; cursor: pointer; display: flex; flex-direction: column;
     box-shadow: .22em .22em 0 #000, inset -.2em -.2em 0 rgba(0, 0, 0, .35), inset .2em .2em 0 rgba(255, 255, 255, .1); }
@@ -411,12 +413,13 @@
   <div id="shop" class="ov">
     <div class="stitle">🛒 상점</div>
     <div id="shopCoins" class="wallet">🍎 보유 코인 0</div>
-    <!-- filled by main.js (buildShop) from PK.Skills.ITEMS -->
+    <div id="shopTabs" class="row"></div>
+    <!-- filled by main.js (buildShop): one tab (칸) at a time -->
     <div id="shopList"></div>
     <div class="row">
       <button id="btnShopBack" class="btn alt">← 뒤로</button>
     </div>
-    <div class="hint">음식 1개 = 코인 1 (레이스당 최대 10개, 완주하면 적립) · 장착한 아이템은 레이스마다 1번, C 키로 사용 · 방향키 + Enter 구매 · E 장착 · Esc 뒤로</div>
+    <div class="hint">음식 1개 = 코인 1 (레이스당 최대 10개, 완주하면 적립) · 장착한 아이템은 레이스마다 1번, C 키로 사용 · 1~4 / Q 칸 바꾸기 · 방향키 + Enter 구매 · E 장착 · Esc 뒤로</div>
   </div>
 
   <!-- 캐릭터 테스트 -->

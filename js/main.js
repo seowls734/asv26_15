@@ -645,7 +645,10 @@ window.PK = window.PK || {};
   // ---------------------------------------------------------------------------
   // shop (title): buy items with food coins, equip one for the next races
   // ---------------------------------------------------------------------------
-  let shopSel = 0, shopCards = [], shopMsg = '';
+  let shopSel = 0, shopCards = [], shopMsg = '', shopTab = 'item';
+  // shop tabs (칸): items / characters / cart bodies / decorations
+  const SHOP_TABS = [['item', '🎒 아이템'], ['char', '🧑 캐릭터'], ['body', '🛒 카트'], ['deco', '🎀 꾸미기']];
+  function setShopTab(t) { if (t === shopTab) return; shopTab = t; shopSel = 0; shopMsg = ''; uiBeep(0); buildShop(); }
   function goShop() {
     G.state = 'shop'; G.attract = true;
     showOnly('shop');
@@ -656,12 +659,22 @@ window.PK = window.PK || {};
     const list = el.shopList, I = ITEMS(), ids = PK.Skills.ITEM_IDS || Object.keys(I);
     if (el.shopCoins) el.shopCoins.textContent = '🍎 보유 코인 ' + wallet() + (shopMsg ? '  ·  ' + shopMsg : '');
     if (!list) return;
+    const tabs = document.getElementById('shopTabs');
+    if (tabs) {
+      tabs.innerHTML = '';
+      SHOP_TABS.forEach(([t, label], n) => {
+        const b = mk('button', 'btn ' + (t === shopTab ? '' : 'alt'), label + ' (' + (n + 1) + ')');
+        b.addEventListener('click', () => { ensureAudio(); setShopTab(t); });
+        tabs.appendChild(b);
+      });
+    }
     list.innerHTML = '';
     shopCards = [];
     const eq = equipped();
-    ids.forEach((id, i) => {
+    if (shopTab === 'item') ids.forEach((id, i) => {
       const it = I[id], n = owned(id), can = wallet() >= it.price;
       const c = mk('div', 'icard' + (id === eq ? ' eq' : ''));
+      c.dataset.sid = id;
       const hd = mk('div', 'ihead');
       const cv = copyCanvas(it.icon, '#ffcc00', 12, 12);
       hd.appendChild(cv);
@@ -685,12 +698,13 @@ window.PK = window.PK || {};
     });
     // character cards: buy once, then pick them on kart select
     const SD = PK.Skills.DEFS || {};
-    CHAR_SHOP.forEach((ch) => {
+    if (shopTab === 'char') CHAR_SHOP.forEach((ch) => {
       const d = PK.Karts.DEFS[ch.def];
       if (!d) return;
       const i = shopCards.length, have = charOwned(ch), can = !have && wallet() >= ch.price;
       const sd = SD[d.skill] || {};
       const c = mk('div', 'icard char' + (have ? ' eq' : ''));
+      c.dataset.sid = 'char:' + ch.def;
       const hd = mk('div', 'ihead');
       const cv = copyCanvas(PK.Karts.sprite(ch.def, true), d.color, 16, 12);
       hd.appendChild(cv);
@@ -711,9 +725,10 @@ window.PK = window.PK || {};
     });
     // everyday cart bodies: buy once, then equip (looks only)
     const curBody = bodyEquipped();
-    BODIES().forEach((b) => {
+    if (shopTab === 'body') BODIES().forEach((b) => {
       const i = shopCards.length, have = bodyOwned(b.id), price = BODY_PRICE[b.id], can = !have && wallet() >= price;
       const c = mk('div', 'icard body' + (b.id === curBody ? ' eq' : ''));
+      c.dataset.sid = 'body:' + b.id;
       const hd = mk('div', 'ihead');
       let spr = null;
       try { spr = PK.Karts.bodySprite ? PK.Karts.bodySprite(b.id, selIdx) : null; } catch (e) { spr = null; }
@@ -740,10 +755,11 @@ window.PK = window.PK || {};
     });
     // decorations: hats / flags / wheels — buy once, wear one of each kind (tap again to take off)
     const worn = decoWorn();
-    DECO_LIST().forEach((dc) => {
+    if (shopTab === 'deco') DECO_LIST().forEach((dc) => {
       const i = shopCards.length, have = decoOwned(dc.kind, dc.id), on = worn[dc.kind] === dc.id;
       const price = DECO_PRICE[dc.kind][dc.id], can = !have && wallet() >= price;
       const c = mk('div', 'icard deco' + (on ? ' eq' : ''));
+      c.dataset.sid = 'deco:' + dc.kind + ':' + dc.id;
       const hd = mk('div', 'ihead');
       let spr = null;
       try { spr = PK.Karts.decoSprite ? PK.Karts.decoSprite(dc.kind, dc.id, selIdx) : null; } catch (e) { spr = null; }
@@ -850,17 +866,7 @@ window.PK = window.PK || {};
     else { setEquip(id); uiBeep(1); shopMsg = ITEMS()[id].nameKo + ' 장착'; }
     buildShop();
   }
-  const shopId = () => {
-    const ids = PK.Skills.ITEM_IDS || Object.keys(ITEMS());
-    if (shopSel < ids.length) return ids[shopSel];
-    const chars = CHAR_SHOP.filter((c) => PK.Karts.DEFS[c.def]);
-    const ch = chars[shopSel - ids.length];
-    if (ch) return 'char:' + ch.def;
-    const bodies = BODIES(), b = bodies[shopSel - ids.length - chars.length];
-    if (b) return 'body:' + b.id;
-    const dc = DECO_LIST()[shopSel - ids.length - chars.length - bodies.length];
-    return dc ? 'deco:' + dc.kind + ':' + dc.id : '';
-  };
+  const shopId = () => { const c = shopCards[shopSel]; return c && c.dataset ? c.dataset.sid || '' : ''; };
 
   // ---------------------------------------------------------------------------
   // character test (title, K): any character on any map right away + unlock / coin cheats
@@ -1707,7 +1713,10 @@ window.PK = window.PK || {};
       else if (c === 'ArrowRight' || c === 'KeyD') d = 1;
       else if (c === 'ArrowUp' || c === 'KeyW') d = -cols;
       else if (c === 'ArrowDown' || c === 'KeyS') d = cols;
-      if (d) { shopSel = ((shopSel + d) % n + n) % n; refreshShopSel(); uiBeep(0); }
+      const tn = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[c];
+      if (tn !== undefined) setShopTab(SHOP_TABS[tn][0]);
+      else if (c === 'KeyQ') setShopTab(SHOP_TABS[(SHOP_TABS.findIndex((x) => x[0] === shopTab) + 1) % SHOP_TABS.length][0]);
+      else if (d) { shopSel = ((shopSel + d) % n + n) % n; refreshShopSel(); uiBeep(0); }
       else if (isEnter(c) && shopId()) shopBuy(shopId());
       else if ((c === 'KeyE' || c === 'KeyC') && shopId()) shopEquip(shopId());
       else if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
