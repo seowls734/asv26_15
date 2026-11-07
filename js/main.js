@@ -13,7 +13,7 @@ window.PK = window.PK || {};
   const ATTRACT_RESET = 75;        // seconds before the attract race is re-seeded
   const GHOST_MAP = 4, GHOST_CHANCE = 0.10;
   const SAME_SPEED = { maxV: 153, acc: 108, boostPow: 1.39 };   // the old middle-weight kart's numbers
-  const AI_SPEED = 1.25;                                          // AI rivals run 1.25× the player's speed
+  const AI_SPEED = 1;                                             // AI rivals run at the player's speed
   // the cup rotation: every non-secret map in PK.Track.MAPS (0–3, plus any new ones such as the maze map)
   let REGULAR = [0, 1, 2, 3];
   const NORMAL_KARTS = [0, 1, 2, 3, 4, 5], GHOST_KARTS = [6, 7];   // vampire + ghost join the ghost map
@@ -75,8 +75,21 @@ window.PK = window.PK || {};
   const ghostOwned = () => lsGet(LS_GHOST_KART) === '1';
   const glitchOwned = () => lsGet(LS_GLITCH_KART) === '1';
   const hasGlitchMap = () => !!MAPS()[GLITCH_MAP];
+  // characters: only 레드 (0) is free; the other basic karts and the vampire are bought with food
+  // coins in the shop. Ghost / glitch are never for sale — they are won on their secret maps.
+  const FREE_KART = 0;
+  const CHAR_SHOP = [
+    { def: 1, key: 'pk_own_kart_1', price: 10 },
+    { def: 2, key: 'pk_own_kart_2', price: 15 },
+    { def: 3, key: 'pk_own_kart_3', price: 15 },
+    { def: 4, key: 'pk_own_kart_4', price: 20 },
+    { def: 5, key: 'pk_own_kart_5', price: 25 },
+    { def: 6, key: 'pk_own_kart_6', price: 50 },   // 뱀파이어: the only special character for sale
+  ];
+  const charOwned = (c) => lsGet(c.key) === '1';
   const playable = () => {
-    const r = NORMAL_KARTS.slice();
+    const r = [FREE_KART];
+    CHAR_SHOP.forEach((c) => { if (charOwned(c) && c.def < PK.Karts.DEFS.length) r.push(c.def); });
     if (ghostOwned()) r.push(GHOST_KART);
     if (glitchOwned() && GLITCH_KART < PK.Karts.DEFS.length) r.push(GLITCH_KART);
     return r;
@@ -342,6 +355,32 @@ window.PK = window.PK || {};
       list.appendChild(c);
       shopCards.push(c);
     });
+    // character cards: buy once, then pick them on kart select
+    const SD = PK.Skills.DEFS || {};
+    CHAR_SHOP.forEach((ch) => {
+      const d = PK.Karts.DEFS[ch.def];
+      if (!d) return;
+      const i = shopCards.length, have = charOwned(ch), can = !have && wallet() >= ch.price;
+      const sd = SD[d.skill] || {};
+      const c = mk('div', 'icard char' + (have ? ' eq' : ''));
+      const hd = mk('div', 'ihead');
+      const cv = copyCanvas(PK.Karts.sprite(ch.def, true), d.color, 16, 12);
+      hd.appendChild(cv);
+      const nm = mk('div', 'iname', '캐릭터 · ' + d.nameKo);
+      nm.appendChild(mk('small', null, have ? '보유 중' : '🍎 ' + ch.price));
+      hd.appendChild(nm);
+      c.appendChild(hd);
+      c.appendChild(mk('div', 'idesc', '스킬: ' + (sd.nameKo || d.skill) + (sd.desc ? ' — ' + sd.desc : '')));
+      const ft = mk('div', 'ifoot');
+      ft.appendChild(mk('span', null, have ? '카트 선택에서 고르기' : '한 번 사면 계속 사용'));
+      const bb = mk('button', 'btn ibtn' + (can ? '' : ' off'), have ? '보유 ✓' : '구매');
+      bb.addEventListener('click', (e) => { e.stopPropagation(); ensureAudio(); shopSel = i; shopBuy('char:' + ch.def); });
+      ft.appendChild(bb);
+      c.appendChild(ft);
+      c.addEventListener('click', () => { if (shopSel !== i) { shopSel = i; refreshShopSel(); uiBeep(0); } });
+      list.appendChild(c);
+      shopCards.push(c);
+    });
     shopSel = U.clamp(shopSel, 0, Math.max(0, shopCards.length - 1));
     refreshShopSel();
   }
@@ -351,6 +390,15 @@ window.PK = window.PK || {};
     if (c && c.scrollIntoView && G.state === 'shop') { try { c.scrollIntoView({ block: 'nearest' }); } catch (e) { /* ignore */ } }
   }
   function shopBuy(id) {
+    if (String(id).indexOf('char:') === 0) {
+      const ch = CHAR_SHOP.find((c) => 'char:' + c.def === id), d = ch && PK.Karts.DEFS[ch.def];
+      if (!ch || !d) return;
+      if (charOwned(ch)) { uiBeep(0); shopMsg = d.nameKo + '은(는) 이미 있어요'; }
+      else if (wallet() < ch.price) { uiBeep(0); shopMsg = '코인이 부족해요'; }
+      else { setWallet(wallet() - ch.price); lsSet(ch.key, '1'); uiBeep(1); sfx('gauge'); shopMsg = d.nameKo + ' 캐릭터 획득!'; }
+      buildShop();
+      return;
+    }
     const it = ITEMS()[id];
     if (!it) return;
     if (buyItem(id)) { uiBeep(1); shopMsg = it.nameKo + ' 구매!'; }
@@ -358,12 +406,19 @@ window.PK = window.PK || {};
     buildShop();
   }
   function shopEquip(id) {
+    if (String(id).indexOf('char:') === 0) { uiBeep(0); shopMsg = '캐릭터는 카트 선택에서 골라요'; buildShop(); return; }
     if (owned(id) <= 0) { uiBeep(0); shopMsg = '먼저 구매하세요'; }
     else if (equipped() === id) { setEquip(''); uiBeep(0); shopMsg = '장착 해제'; }
     else { setEquip(id); uiBeep(1); shopMsg = ITEMS()[id].nameKo + ' 장착'; }
     buildShop();
   }
-  const shopId = () => (PK.Skills.ITEM_IDS || [])[shopSel];
+  const shopId = () => {
+    const ids = PK.Skills.ITEM_IDS || Object.keys(ITEMS());
+    if (shopSel < ids.length) return ids[shopSel];
+    const chars = CHAR_SHOP.filter((c) => PK.Karts.DEFS[c.def]);
+    const ch = chars[shopSel - ids.length];
+    return ch ? 'char:' + ch.def : '';
+  };
 
   // ---------------------------------------------------------------------------
   // character test (title, K): any character on any map right away + unlock / coin cheats
@@ -974,7 +1029,7 @@ window.PK = window.PK || {};
     refreshCards();
   }
   function refreshCards() {
-    // the 6 normal karts, plus the ghost once won on the ghost map (the vampire stays a rival)
+    // 레드 + karts bought in the shop (incl. the vampire) + ghost / glitch once won
     const r = playable();
     for (let i = 0; i < cardEls.length; i++) cardEls[i].style.display = r.indexOf(i) < 0 ? 'none' : '';
     for (let i = 0; i < cardEls.length; i++) {
