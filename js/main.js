@@ -36,6 +36,7 @@ window.PK = window.PK || {};
     debugRace(id) { startRace(selIdx, id | 0, false); },
     // tests / console: advance the game by n fixed steps without waiting for frames
     debugStep(n) { for (let i = 0; i < (n | 0); i++) step(1 / 60); },
+    debugShot() { render(); return canvas.toDataURL('image/png'); },
   };
 
   // ---------------------------------------------------------------------------
@@ -2161,6 +2162,30 @@ window.PK = window.PK || {};
     return U.clamp(U.angDiff(camA, k.a) * 1.4 + (k.drift ? (k.driftDir || 0) * 0.5 : 0), -1, 1);
   }
 
+  // corner warning: how much the track turns 36..120 units ahead of the player
+  function drawCornerWarn(p, blink) {
+    const T = PK.Track, N = T.N, TAN = T.TAN;
+    if (!TAN || !(p.idx >= 0)) return;
+    const d = U.angDiff(TAN[(p.idx + 6) % N], TAN[(p.idx + 20) % N]);
+    const a = Math.abs(d);
+    if (a < 0.75) return;
+    const n = a > 1.35 ? 3 : 2, dir = d > 0 ? 1 : -1;   // + = turning right on screen
+    const col = n === 3 ? (blink || calm ? '#ff5a3a' : '#ffcc00') : '#ffcc00';
+    const w = 7, gap = 3, total = n * w + (n - 1) * gap, x0 = CX - total / 2, y0 = bannerT > 0 || toastT > 0 ? 66 : 44;   // below a banner / toast
+    for (let i = 0; i < n; i++) {
+      const x = x0 + i * (w + gap);
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.fillStyle = pass ? col : '#000';
+        for (let r = 0; r < 9; r++) {
+          const off = 4 - Math.abs(r - 4);   // 0..4..0: a '>' shape
+          const px = dir > 0 ? x + off : x + 4 - off;
+          if (pass) ctx.fillRect(px, y0 + r, 3, 1);
+          else ctx.fillRect(px - 1, y0 + r - 1, 5, 3);
+        }
+      }
+    }
+  }
+
   // a fresh boost / rocket start: a short, light screen shake (none in calm mode)
   function boostKick(t) {
     if (calm || G.attract) return;
@@ -2538,6 +2563,9 @@ window.PK = window.PK || {};
 
     // wrong way
     if (st === 'race' && p.wrongT > 1 && blink) textC('WRONG WAY', CX, 64, 3, '#ff4040');
+
+    // ⚠ corner ahead: yellow chevrons point the way before a sharp bend (2 = bend, 3 = hairpin)
+    if (st === 'race' && !(p.wrongT > 1)) drawCornerWarn(p, blink);
 
     // banner + toast
     if (bannerT > 0 && st !== 'countdown') textC(bannerText, CX, 34, 3, bannerCol);

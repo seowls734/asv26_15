@@ -1585,27 +1585,27 @@ window.PK = window.PK || {};
   const ROAD_MART = {
     railPost: '#5d5a55', railDark: '#7a1c1c', railTop: '#cf3a2c', scuff: 'rgba(90,70,50,0.06)', shadow: 'rgba(60,50,40,0.10)',
     curbBase: '#1f1d1b', curb: '#f2c418', lane: ['#62778b', '#6b8094', '#73899d', '#6b8094'], line: '#f4f4f0',
-    propShadow: 'rgba(60,45,30,0.16)', edge: '#dfe6ec', kerb: ['#d8382f', '#f4f4f0'], mark: 'rgba(244,244,240,0.75)'
+    propShadow: 'rgba(60,45,30,0.16)', edge: '#ffffff', kerb: ['#d8382f', '#f4f4f0'], mark: 'rgba(244,244,240,0.75)', dim: 0.12
   };
   const ROAD_ICE = {
     railPost: '#6a7a88', railDark: '#3a5a7a', railTop: '#cfe6f6', scuff: 'rgba(255,255,255,0.10)', shadow: 'rgba(40,70,100,0.12)',
-    curbBase: '#2a4a6a', curb: '#ffffff', lane: ['#3f6f9c', '#4a7aa8', '#5687b4', '#4a7aa8'], line: '#e8f6ff',
-    propShadow: 'rgba(40,80,120,0.16)', edge: '#bfe4f8', kerb: ['#2f6fb8', '#ffffff'], mark: 'rgba(232,246,255,0.7)'
+    curbBase: '#2a4a6a', curb: '#ffffff', lane: ['#22507e', '#2a5a8a', '#326496', '#2a5a8a'], line: '#e8f6ff',
+    propShadow: 'rgba(40,80,120,0.16)', edge: '#ffffff', kerb: ['#2f6fb8', '#ffffff'], mark: 'rgba(232,246,255,0.7)', dim: 0.2
   };
   const ROAD_WOOD = {
     railPost: '#4a2e16', railDark: '#6e4720', railTop: '#d8b070', scuff: 'rgba(90,60,30,0.08)', shadow: 'rgba(60,40,20,0.14)',
-    curbBase: '#1f4a24', curb: '#f2f2e6', lane: ['#6b4a30', '#74523a', '#7c5a40', '#74523a'], line: '#f6e8b0',
-    propShadow: 'rgba(60,40,20,0.20)', edge: '#d8b070', kerb: ['#3f9a4a', '#f2f2e6'], mark: 'rgba(246,232,176,0.7)'
+    curbBase: '#1f4a24', curb: '#f2f2e6', lane: ['#4c535e', '#555c68', '#5d6572', '#555c68'], line: '#f6e8b0',
+    propShadow: 'rgba(60,40,20,0.20)', edge: '#fff4d0', kerb: ['#3f9a4a', '#f2f2e6'], mark: 'rgba(246,232,176,0.7)', dim: 0.22
   };
   const ROAD_ASPHALT = {
     railPost: '#5a5560', railDark: '#7a7480', railTop: '#f2c418', scuff: 'rgba(0,0,0,0.06)', shadow: 'rgba(20,10,20,0.14)',
-    curbBase: '#1a1a1e', curb: '#f2c418', lane: ['#3a3640', '#403b46', '#46404c', '#403b46'], line: '#f4f0e8',
-    propShadow: 'rgba(20,10,30,0.24)', edge: '#e8e0d0', kerb: ['#d8382f', '#f4f0e8'], mark: 'rgba(244,240,232,0.7)'
+    curbBase: '#1a1a1e', curb: '#f2c418', lane: ['#5e6274', '#666a7c', '#6e7286', '#666a7c'], line: '#f4f0e8',
+    propShadow: 'rgba(20,10,30,0.24)', edge: '#ffffff', kerb: ['#d8382f', '#f4f0e8'], mark: 'rgba(244,240,232,0.7)', dim: 0.35
   };
   const ROAD_GRAVE = {   // packed-dirt cemetery path, stone edging, wrought-iron rail
     railPost: '#141320', railDark: '#262434', railTop: '#6c6880', scuff: 'rgba(10,20,30,0.10)', shadow: 'rgba(8,10,24,0.22)',
-    curbBase: '#3a3640', curb: '#a29ea6', lane: ['#6e5c4c', '#776452', '#806c58', '#776452'], line: '#5a4a3e',
-    propShadow: 'rgba(4,6,20,0.32)'
+    curbBase: '#3a3640', curb: '#a29ea6', lane: ['#8a7660', '#937e68', '#9c8670', '#937e68'], line: '#5a4a3e',
+    propShadow: 'rgba(4,6,20,0.32)', edge: '#c8c2cc', dim: 0.3
   };
   const ROAD_GLITCH = {
     railPost: '#ff2ad0', railDark: '#1a0828', railTop: '#00e8ff', scuff: 'rgba(0,0,0,0.25)', shadow: 'rgba(255,40,200,0.12)',
@@ -2236,6 +2236,16 @@ window.PK = window.PK || {};
 
   // ---------------------------------------------------------------- the Track object
   let TILE = new Uint32Array(TS * TS);   // outside tile of the current map / theme
+  // darker copy of a floor tile (ABGR pixels): the ground next to the road is dimmed by f (0..1)
+  function dimTile(t, f) {
+    if (!(f > 0)) return t;
+    const k = 1 - f, o = new Uint32Array(t.length);
+    for (let i = 0; i < t.length; i++) {
+      const v = t[i], r = (v & 255) * k, g = ((v >>> 8) & 255) * k, b = ((v >>> 16) & 255) * k;
+      o[i] = (v & 0xff000000) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+    }
+    return o;
+  }
   const cache = [];
 
   const T = PK.Track = {
@@ -2277,7 +2287,7 @@ window.PK = window.PK || {};
       const cl = buildCenterline(def.ctrl);
       this.N = cl.N; this.PTS = cl.PTS; this.TAN = cl.TAN; this.length = cl.length;
       this.ROAD_W = def.roadW || 44; this.OFFROAD_D = this.ROAD_W / 2 + 5; this.BARRIER = def.barrier || 40;
-      TILE = def.tile();
+      TILE = dimTile(def.tile(), def.road && def.road.dim);
       const fog = U.hex(def.fog);
       this._placePadsAndPuddles(def);
       this._placeProps(def);
@@ -2680,7 +2690,8 @@ window.PK = window.PK || {};
         }
       }
       stroke(ROAD_W, RS.lane[0]);
-      if (RS.edge) { stroke(ROAD_W - 3, RS.edge); stroke(ROAD_W - 5, RS.lane[0]); }
+      // a clear 2 px edge line on both sides (the road reads as a road even far away)
+      stroke(ROAD_W - 1, RS.edge || RS.curb); stroke(ROAD_W - 5, RS.lane[0]);
       stroke(ROAD_W - 6, RS.lane[1]);
       stroke(ROAD_W - 22, RS.lane[2]);
       stroke(ROAD_W - 30, RS.lane[3]);
