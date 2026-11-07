@@ -205,13 +205,14 @@ window.PK = window.PK || {};
   }
 
   // ---------------------------------------------------------------------------
-  // 👻 ghost race: the player's best run on each map is recorded (position + steering every
-  // GH_DT s) and replayed as a see-through kart in later races. Off in online / test races.
+  // 👻 ghost mode (title): a solo race (no AI) against your own best run on that map. Every race
+  // records the run (position + steering every GH_DT s); the fastest one per map is kept and replayed
+  // as a see-through kart in ghost mode. Off in online / test races.
   // Saved as 'pk_ghostrun_m<id>' = { t: finish time, d: defIndex, p: [x, y, steer, ...] }.
   // ---------------------------------------------------------------------------
-  const LS_GHOST_ON = 'pk_ghost_on', GH_DT = 0.1;
+  const GH_DT = 0.1;
   const ghostKey = (id) => 'pk_ghostrun_m' + id;
-  let ghostOn = true, ghRec = null, ghRun = null, ghKart = null;
+  let ghostMode = false, ghRec = null, ghRun = null, ghKart = null;
   function ghostLoad(id) {
     try {
       const o = JSON.parse(lsGet(ghostKey(id)) || 'null');
@@ -223,7 +224,7 @@ window.PK = window.PK || {};
     ghRec = null; ghRun = null; ghKart = null;
     if (attract || G.online || testMode) return;
     ghRec = [];
-    const o = ghostOn ? ghostLoad(raceMap) : null;
+    const o = ghostMode ? ghostLoad(raceMap) : null;
     if (!o) return;
     ghRun = o;
     const def = PK.Karts.DEFS[o.d] ? o.d : 0;
@@ -267,16 +268,26 @@ window.PK = window.PK || {};
     return true;
   }
   // console / tests: PK.Game.ghostInfo()
-  G.ghostInfo = () => ({ on: ghostOn, rec: ghRec ? ghRec.length / 3 : -1, run: ghRun ? ghRun.t : 0, at: ghKart ? [Math.round(ghKart.x), Math.round(ghKart.y)] : null });
-  function refreshGhostBtn() {
-    const b = document.getElementById('btnGhost');
-    if (b) b.textContent = '👻 고스트 기록: ' + (ghostOn ? '켬' : '끔');
-  }
-  function toggleGhost() {
-    ghostOn = !ghostOn;
-    lsSet(LS_GHOST_ON, ghostOn ? '1' : '0');
-    refreshGhostBtn();
-    toast(ghostOn ? 'GHOST ON' : 'GHOST OFF');
+  G.ghostInfo = () => ({ mode: ghostMode, rec: ghRec ? ghRec.length / 3 : -1, run: ghRun ? ghRun.t : 0, at: ghKart ? [Math.round(ghKart.x), Math.round(ghKart.y)] : null });
+  // title '👻 고스트 모드': pick a map, then a kart, then race the ghost
+  function goGhostMode() { ghostMode = true; goMaps(); }
+  // finish in ghost mode: who won? (old = the ghost's time before this run, 0 = no ghost yet)
+  function ghostResult(k, old) {
+    const b = el.mapBanner;
+    if (!b) return;
+    b.innerHTML = '';
+    if (!(old > 0)) {
+      b.appendChild(mk('b', null, '👻 첫 고스트 기록 완성!'));
+      b.appendChild(mk('small', null, '다음 판부터 이 기록의 고스트와 대결해요'));
+    } else if (k.finishTime < old) {
+      b.appendChild(mk('b', null, '🏆 고스트를 이겼어요!'));
+      b.appendChild(mk('small', null, (old - k.finishTime).toFixed(2) + '초 빨랐어요 · 이번 기록이 새 고스트가 돼요'));
+    } else {
+      b.appendChild(mk('b', null, '👻 고스트가 이겼어요'));
+      b.appendChild(mk('small', null, (k.finishTime - old).toFixed(2) + '초 차이 · 다시 도전해 보세요 (R)'));
+    }
+    b.className = 'on';
+    mapBannerT = 3.2;
   }
 
   // ---------------------------------------------------------------------------
@@ -336,7 +347,6 @@ window.PK = window.PK || {};
       mtest: document.getElementById('mtest'), mtList: document.getElementById('mtList'),
       ovt: document.getElementById('ovt'),
     };
-    ghostOn = lsGet(LS_GHOST_ON) !== '0'; refreshGhostBtn();
     calm = lsGet(LS_CALM) !== '0';   // calm (no shake / flicker) is on unless the player turned it off
     easy = lsGet(LS_EASY) !== '0';   // easy controls too
     // console/test access to the wallet + shop
@@ -403,7 +413,7 @@ window.PK = window.PK || {};
   function randomKart() { return NORMAL_KARTS[(Math.random() * NORMAL_KARTS.length) | 0]; }
 
   // '게임 시작': kart select for the next map of the rotation
-  function startGame() { pendingMap = baseMap; selectFrom = 'title'; goSelect(); }
+  function startGame() { ghostMode = false; pendingMap = baseMap; selectFrom = 'title'; goSelect(); }
 
   function goSelect() {
     G.state = 'select'; G.attract = true;
@@ -420,6 +430,8 @@ window.PK = window.PK || {};
   function goMaps() {
     G.state = 'maps'; G.attract = true;
     showOnly('maps');
+    const mt = el.maps && el.maps.querySelector('.stitle');
+    if (mt) mt.textContent = ghostMode ? '👻 고스트 모드 · 맵 선택' : '맵 선택';
     buildMapList();
     if (SECRET_MAPS.indexOf(raceMap) >= 0) setupRace(randomKart(), true, baseMap);
   }
@@ -780,6 +792,7 @@ window.PK = window.PK || {};
     if (!testMode) { selIdx = defIdx; lsSet(LS_KART, String(defIdx)); }
     if (!testMode && REGULAR.indexOf(mapId) >= 0) { baseMap = mapId; lsSet(LS_MAP, String(mapId)); }
     let surprise = false;
+    if (ghostMode) roll = false;
     if (roll && SECRET_MAPS.indexOf(mapId) < 0) {
       // 1% glitch world first (only once map.js has it), then the 10% ghost map
       if (hasGlitchMap() && Math.random() < GLITCH_CHANCE) { mapId = GLITCH_MAP; surprise = true; }
@@ -1255,6 +1268,7 @@ window.PK = window.PK || {};
     // glitch world: one glitch rival joins (unless the player drives it)
     if (glitch && GLITCH_KART < nDefs && defIdx !== GLITCH_KART) order = shuffle(order.slice(0, 4).concat([GLITCH_KART]));
     if (order.length > 5) order.length = 5;
+    if (ghostMode && !attract) order = [];   // 👻 ghost mode: just you (and your ghost)
     const n = order.length + 1;
     // back row = slots n-2, n-1 (n even). Random side.
     order.splice(n - 1 - (Math.random() < 0.5 ? 1 : 0), 0, defIdx);
@@ -1354,10 +1368,12 @@ window.PK = window.PK || {};
     if (bl > 0 && (!(best.lap > 0) || bl < best.lap)) { best.lap = bl; newLapRecord = true; }
     if (testMode) { newRecord = false; newLapRecord = false; }
     if (newRecord || newLapRecord) lsSet(bestKey(raceMap), JSON.stringify(best));
+    const ghOld = ghRun ? ghRun.t : 0;
     if (ghostSave(k)) G.dbg.ghostSaved = (G.dbg.ghostSaved || 0) + 1;
+    if (ghostMode && !testMode && !G.online) ghostResult(k, ghOld);
     bankCoins();
-    if (!testMode) rollGhostReward(k);
-    if (!testMode) achOnFinish(k);
+    if (!testMode && !ghostMode) rollGhostReward(k);   // solo ghost races: no unlock rolls / achievements
+    if (!testMode && !ghostMode) achOnFinish(k);
     if (!testMode && PK.Rank) PK.Rank.submit(raceMap, k.finishTime, k.defIndex);   // ranking board
     musicStop();
   }
@@ -1444,6 +1460,7 @@ window.PK = window.PK || {};
     PIN.boost = !!(keys.KeyZ || touch.boost);
     PIN.skill = !!(keys.KeyX || touch.skill);
     if (easy) easyAssist(PIN);
+    lastGas = !!PIN.gas;
     return PIN;
   }
 
@@ -1478,13 +1495,13 @@ window.PK = window.PK || {};
     const st = G.state;
     if (st === 'title') {
       if (isEnter(c)) { uiBeep(1); startGame(); }
-      else if (c === 'KeyL') { uiBeep(0); goMaps(); }
+      else if (c === 'KeyL') { uiBeep(0); ghostMode = false; goMaps(); }
       else if (c === 'KeyS') { uiBeep(0); goShop(); }
       else if (c === 'KeyD') { uiBeep(0); goDex(); }
       else if (c === 'KeyH') { uiBeep(0); goAch(); }
       else if (c === 'KeyK') { uiBeep(0); goRank(); }
       else if (c === 'KeyV') toggleCalm();
-      else if (c === 'KeyG') { uiBeep(0); toggleGhost(); }
+      else if (c === 'KeyG') { uiBeep(0); goGhostMode(); }
     } else if (st === 'rank') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
       else if (c === 'ArrowLeft' || c === 'ArrowRight') { const n = MAPS().length; rankMap = (rankMap + (c === 'ArrowRight' ? 1 : n - 1)) % n; uiBeep(0); buildRank(); }
@@ -1551,7 +1568,7 @@ window.PK = window.PK || {};
     window.addEventListener('touchstart', ensureAudio, { passive: true });
     const on = (e, f) => { if (e) e.addEventListener('click', f); };
     on(el.btnStart, () => { ensureAudio(); uiBeep(1); startGame(); });
-    on(el.btnMaps, () => { ensureAudio(); uiBeep(1); goMaps(); });
+    on(el.btnMaps, () => { ensureAudio(); uiBeep(1); ghostMode = false; goMaps(); });
     on(el.btnMapsBack, () => { uiBeep(0); goTitle(); });
     on(el.btnShop, () => { ensureAudio(); uiBeep(1); goShop(); });
     on(el.btnShopBack, () => { uiBeep(0); goTitle(); });
@@ -1565,7 +1582,7 @@ window.PK = window.PK || {};
     on(el.btnItem, () => { ensureAudio(); cycleItem(); });
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
-    on(document.getElementById('btnGhost'), () => { ensureAudio(); toggleGhost(); });
+    on(document.getElementById('btnGhost'), () => { ensureAudio(); uiBeep(1); goGhostMode(); });
     on(el.btnTest, () => { ensureAudio(); uiBeep(1); goTest(); });
     on(el.btnMapTest, () => { ensureAudio(); uiBeep(1); goMapTest(); });
     const byId = (id) => document.getElementById(id);
@@ -2195,6 +2212,7 @@ window.PK = window.PK || {};
     text(lap + '/' + C.LAPS, 4, 11, 2, '#fff');
     // race time (center top) + map name
     textC(fmt(G.raceTime || 0.0001).replace('--:--.--', '0:00.00'), CX, 4, 2, '#fff');
+    if (ghostMode && !G.online) textC(ghRun ? 'GHOST ' + fmt(ghRun.t) : 'GHOST: FIRST RUN', CX, coarse ? 24 : 16, 1, '#bfe4ff', true);
     if (coarse) textC(mapTag, CX, 16, 1, ghost ? '#c8a0ff' : '#a898c8');
     else text(mapTag, 4, 23, 1, ghost ? '#c8a0ff' : '#a898c8');
     // position (top-right)
@@ -2423,6 +2441,7 @@ window.PK = window.PK || {};
   // audio
   // ---------------------------------------------------------------------------
   let ac = null, master = null, sfxBus = null, engO = null, engO2 = null, engF = null, engG = null, noiseBuf = null;
+  let skidG = null, skidO = null, skidF = null, engDip = 0, engLastT = 0, lastGas = false;   // drift squeal loop, engine dip after hits
   const lastSfx = Object.create(null);
   function ensureAudio() {
     if (ac) { if (ac.state === 'suspended' && ac.resume) ac.resume().catch(() => {}); return; }
@@ -2444,6 +2463,14 @@ window.PK = window.PK || {};
       noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      // tyre squeal (drift / hard braking): looped hiss through a narrow band + a wavering high tone
+      const sn = ac.createBufferSource(); sn.buffer = noiseBuf; sn.loop = true;
+      skidF = ac.createBiquadFilter(); skidF.type = 'bandpass'; skidF.frequency.value = 2600; skidF.Q.value = 5;
+      skidO = ac.createOscillator(); skidO.type = 'triangle'; skidO.frequency.value = 950;
+      const so = ac.createGain(); so.gain.value = 0.35;
+      skidG = ac.createGain(); skidG.gain.value = 0;
+      sn.connect(skidF); skidF.connect(skidG); skidO.connect(so); so.connect(skidG); skidG.connect(sfxBus);
+      sn.start(); skidO.start();
     } catch (e) { ac = null; }
     if (ac && !musicInit && PK.Music && PK.Music.init) {
       try { PK.Music.init(ac, master); musicInit = true; if ('muted' in PK.Music) PK.Music.muted = G.muted; } catch (e) { musicInit = false; }
@@ -2485,6 +2512,7 @@ window.PK = window.PK || {};
     if (!G.attract && !calm && name === 'hit') { shakeT = 0.2; shakeMag = 1; }
     if (!G.attract && !calm && name === 'wall') { shakeT = 0.25; shakeMag = 2; }
     if (!G.attract && name === 'glitch') glitchT = 0.35;   // teleport / glitch world: brief screen glitch
+    if (!G.attract && (name === 'wall' || name === 'bump' || name === 'hit')) engDip = Math.max(engDip, name === 'bump' ? 0.5 : 1);
     if (!ac || G.attract || G.muted) return;
     const now = ac.currentTime;
     if (lastSfx[name] !== undefined && now - lastSfx[name] < 0.06) return;
@@ -2517,21 +2545,43 @@ window.PK = window.PK || {};
     } catch (e) { /* ignore */ }
   }
 
+  // engine: pitch climbs with speed through 4 soft 'gears' (a small dip at each shift), brighter and
+  // louder on the throttle; offroad muffles and lowers it; wall / kart hits make it drop with a thud
+  // (engDip). The drift squeal loop (skidG) follows the player's drift and hard braking.
+  const GEARS = [0, 0.28, 0.52, 0.76, 1.5];
   function updateEngine() {
     if (!ac || !engG) return;
     const p = G.player, st = G.state, t = ac.currentTime;
-    let vol = 0, f = 45;
+    const dt = Math.min(0.1, Math.max(0, t - engLastT)); engLastT = t;
+    engDip = Math.max(0, engDip - dt * 2.2);
+    let vol = 0, f = 45, fc = 400, sq = 0, sf = 2600, so = 950;
     if (p && !G.attract && (st === 'countdown' || st === 'race' || st === 'finished')) {
       const r = Math.min(1.5, Math.abs(p.v || 0) / ((p.def && p.def.maxV) || 140));
-      const b = p.boostT > 0;
-      f = 42 + r * 95 + (b ? 30 : 0) + (st === 'countdown' && (keys.ArrowUp || keys.KeyW || touch.gas) ? 25 : 0);
-      vol = 0.05 + r * 0.04 + (b ? 0.05 : 0);
+      const b = p.boostT > 0, gas = st === 'countdown' ? (keys.ArrowUp || keys.KeyW || touch.gas) : lastGas && st === 'race';
+      let gi = 0; while (gi < GEARS.length - 2 && r >= GEARS[gi + 1]) gi++;
+      const inGear = Math.min(1, (r - GEARS[gi]) / (GEARS[gi + 1] - GEARS[gi]));   // 0..1 within this gear
+      f = 40 + r * 70 + inGear * 38 + gi * 6 + (b ? 30 : 0) + (gas ? 10 : 0) + (st === 'countdown' && gas ? 25 : 0);
+      fc = 250 + f * (gas ? 8 : 5.5);
+      vol = 0.045 + r * 0.035 + (gas ? 0.02 : 0) + (b ? 0.05 : 0);
+      if (p.offroad && Math.abs(p.v) > 5) { f *= 0.82; fc *= 0.45; vol *= 1.1; }   // bogged down in the grass / dirt
+      if (engDip > 0) { f *= 1 - 0.42 * engDip; fc *= 1 - 0.55 * engDip; }        // 쿵: the revs fall away
+      // tyre squeal: drifting fast (louder with a bigger slip), or braking hard on the road
+      const slip = Math.abs(Math.sin(U.angDiff(p.ma, p.a) || 0));
+      if (st === 'race' && !p.offroad && Math.abs(p.v) > 30) {
+        if (p.drift) { sq = 0.05 + Math.min(0.06, slip * 0.12); sf = 2200 + slip * 1600; so = 820 + slip * 420 + Math.sin(t * 31) * 40; }
+        else if (p._brake) { sq = 0.04; sf = 3000; so = 1150 + Math.sin(t * 40) * 50; }
+      }
     }
     try {
       engO.frequency.setTargetAtTime(f, t, 0.06);
       engO2.frequency.setTargetAtTime(f * 0.5, t, 0.06);
-      engF.frequency.setTargetAtTime(250 + f * 7, t, 0.06);
+      engF.frequency.setTargetAtTime(fc, t, 0.06);
       engG.gain.setTargetAtTime(vol, t, 0.1);
+      if (skidG) {
+        skidG.gain.setTargetAtTime(G.muted ? 0 : sq, t, sq > 0 ? 0.03 : 0.08);
+        skidF.frequency.setTargetAtTime(sf, t, 0.05);
+        skidO.frequency.setTargetAtTime(so, t, 0.03);
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -2541,6 +2591,7 @@ window.PK = window.PK || {};
   // Online races count like test races (no best times / ranking / unlocks); coins are still banked.
   // ---------------------------------------------------------------------------
   function startOnlineRace(defIdx, mapId, slot, remoteDef) {
+    ghostMode = false;
     if (playable().indexOf(defIdx) < 0) defIdx = NORMAL_KARTS[0];
     if (!MAPS()[mapId]) mapId = REGULAR[0];
     if (!(remoteDef >= 0 && remoteDef < PK.Karts.DEFS.length)) remoteDef = NORMAL_KARTS[0];

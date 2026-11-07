@@ -880,6 +880,7 @@ window.PK = window.PK || {};
     if (k.boostT > 0) k.boostT = Math.max(0, k.boostT - dt);
     if (k._bumpT > 0) k._bumpT -= dt;
     if (k._wallT > 0) k._wallT -= dt;
+    if (k._sparkT > 0) k._sparkT -= dt;
     if (k._mtBurst > 0) k._mtBurst -= dt;
     if (k._obsT > 0) k._obsT -= dt;
     if (k._obsAge < 99) k._obsAge += dt;
@@ -1123,6 +1124,7 @@ window.PK = window.PK || {};
         k.v *= 0.8; k._bumpT = 0.35; sfx(G, k, 'bump');   // a scrape along the wall
         if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
       } else k.v *= 1 - 1.2 * dt;
+      if (Math.abs(k.v) > 18) { k._sparkT = Math.max(k._sparkT || 0, hard ? 0.3 : 0.16); k._sparkSide = s; k._sparkBig = hard ? 1 : 0; }
       // nudge heading back toward track direction
       k.a = wrapAng(k.a + angDiff(k.a, Math.abs(angDiff(t, k.a)) > Math.PI / 2 ? t + Math.PI : t) * Math.min(1, 3 * dt) * 0.5);
     }
@@ -1173,6 +1175,11 @@ window.PK = window.PK || {};
           const J = -(1 + RESTITUTION) * vn / (1 / mA + 1 / mB);
           setVel(A, avx - dx * J / mA, avy - dy * J / mA);
           setVel(B, bvx + dx * J / mB, bvy + dy * J / mB);
+          if (-vn > 8) {   // 몸싸움: sparks on the touching sides of both karts
+            const ra = -Math.sin(A.a) * dx + Math.cos(A.a) * dy, rb = -Math.sin(B.a) * -dx + Math.cos(B.a) * -dy;
+            A._sparkT = 0.22; A._sparkSide = ra >= 0 ? 1 : -1; A._sparkBig = -vn > 30 ? 1 : 0;
+            B._sparkT = 0.22; B._sparkSide = rb >= 0 ? 1 : -1; B._sparkBig = A._sparkBig;
+          }
           if (-vn > 15) {
             const G = PK.Game;
             if ((A.isPlayer || B.isPlayer) && G && G.sfx) G.sfx('bump');
@@ -1510,6 +1517,18 @@ window.PK = window.PK || {};
         px(lx - R() * 7 * s, by - R() * 5 * s, c, sz);
         px(rx + R() * 7 * s, by - R() * 5 * s, c, sz);
       }
+    }
+    // 💥 metal sparks (wall scrape / kart-to-kart contact): short yellow-white streaks flying up and
+    // out from the touching side, a few hot orange ones falling
+    if (k._sparkT > 0) {
+      const ex = k._sparkSide > 0 ? rx + s * 2 : lx - s * 2, dir = k._sparkSide > 0 ? 1 : -1;
+      const n = k._sparkBig ? 9 : 5, ey = by - Math.round(w * 0.32);
+      for (let i = 0; i < n; i++) {
+        const c = R() < 0.25 ? '#ffffff' : R() < 0.7 ? '#ffe14d' : '#ffa21a';
+        const len = 1 + ((R() * 3) | 0), ox = dir * R() * 9 * s, oy = -R() * 7 * s + R() * 3 * s;
+        for (let q = 0; q < len; q++) px(ex + ox + dir * q * s, ey + oy - q * s * 0.6, c);
+      }
+      if (R() < 0.6) px(ex + dir * R() * 5 * s, ey + R() * 6 * s, '#ff7a20');
     }
     // 쿵! wall hit: a burst of grey-brown dust and white sparks on the wall side
     if (k._wallT > 0) {
