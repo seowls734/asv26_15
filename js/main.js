@@ -13,7 +13,7 @@ window.PK = window.PK || {};
   const ATTRACT_RESET = 75;        // seconds before the attract race is re-seeded
   const GHOST_MAP = 4, GHOST_CHANCE = 0.10;
   const SAME_SPEED = { maxV: 153, acc: 108, boostPow: 1.39 };   // the old middle-weight kart's numbers
-  const AI_SPEED = 1.5;                                           // AI rivals run 1.5× the player's speed
+  const AI_SPEED = 1.25;                                          // AI rivals run 1.25× the player's speed
   // the cup rotation: every non-secret map in PK.Track.MAPS (0–3, plus any new ones such as the maze map)
   let REGULAR = [0, 1, 2, 3];
   const NORMAL_KARTS = [0, 1, 2, 3, 4, 5], GHOST_KARTS = [6, 7];   // vampire + ghost join the ghost map
