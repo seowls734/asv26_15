@@ -1,4 +1,4 @@
-// PK.Skills — six mart-themed kart skills (one per kart), world objects, AI usage.
+// PK.Skills — mart-themed kart skills (one per kart; bats/phase for the World 2 vampire/ghost), world objects, AI usage.
 // Contract: see CONTRACT.md "PK.Skills". Only defines things at load time; real work in init().
 window.PK = window.PK || {};
 (function (PK) {
@@ -11,9 +11,12 @@ window.PK = window.PK || {};
   const FOAM_LIFE = 6, FOAM_R = 12, FOAM_HIT_CD = 1.0;
   const RUSH_T = 0.9;
   const MAG_T = 1.6, MAG_STEAL = 30;
+  const MAX_SWARMS = 4, BAT_LIFE = 4.5, BAT_R = 6, BAT_STEAL = 25, BAT_STUN = 0.7, DRAIN_T = 0.8;
+  const PHASE_T = 3, PHASE_MUL = 1.12;
 
   // ---------------------------------------------------------------- state
   const peels = [];   // {x, y, age, owner}
+  const swarms = [];  // {fi, lat, x, y, t, owner, speed, target} — bat flocks following the track
   const melons = [];  // {fi, lat, lv, x, y, h, t, owner, speed, bounces, target}
   const foams = [];   // {x, y, t, owner, r}
   let kst = new Map(); // kart -> per-kart skill state
@@ -21,7 +24,10 @@ window.PK = window.PK || {};
   let rnd = Math.random;
 
   // sprites (built in init)
-  const SPR = { peel: null, melon: [null, null], foam: [], cart: null, magnet: null, coin: null, wrap: null };
+  const SPR = { peel: null, melon: [null, null], foam: [], cart: null, magnet: null, coin: null, wrap: null,
+                bat: [null, null], drop: null, wisp: null, gpx: [] };
+  const glitches = [];  // {x, y, t} teleport pixel bursts
+  const TELE_FX = 0.7;
 
   // sprite pool for sprites()
   const POOL_N = 320;
@@ -52,7 +58,7 @@ window.PK = window.PK || {};
     let s = kst.get(k);
     if (!s) {
       s = { rushT: 0, rushHit: new Set(), magT: 0, magTarget: null, coinT: 0, coinX: 0, coinY: 0,
-            wrapT: 0, soapCd: 0, readySince: -1, aiDelay: 0.5, eager: 0.6 + rnd() * 0.4 };
+            wrapT: 0, soapCd: 0, drainT: 0, drainFrom: null, readySince: -1, aiDelay: 0.5, eager: 0.6 + rnd() * 0.4 };
       kst.set(k, s);
     }
     return s;
@@ -128,7 +134,13 @@ window.PK = window.PK || {};
     bubble: { nameKo: '뽁뽁이 실드', name: 'BUBBLE WRAP', cooldown: 12,
       desc: '5초간 공격 1회를 막는 뽁뽁이 실드 + 약간의 가속', icon: null },
     magnet: { nameKo: '할인 자석', name: 'MAGNET', cooldown: 13,
-      desc: '앞 카트에게 끌려가며 부스터 게이지를 최대 30 훔친다', icon: null }
+      desc: '앞 카트에게 끌려가며 부스터 게이지를 최대 30 훔친다', icon: null },
+    bats: { nameKo: '박쥐 떼', name: 'BAT SWARM', cooldown: 12,
+      desc: '박쥐 떼가 앞 카트를 쫓아가 기절시키고 부스터 게이지를 25 빨아온다', icon: null },
+    phase: { nameKo: '유령화', name: 'PHASE', cooldown: 12,
+      desc: '3초간 반투명해져 카트와 공격을 통과하고 살짝 빨라진다', icon: null },
+    teleport: { nameKo: '순간이동', name: 'TELEPORT', cooldown: 28,
+      desc: '1등 카트와 자리를 맞바꾼다! (이미 1등이면 발동하지 않음)', icon: null }
   };
 
   // ---------------------------------------------------------------- init
@@ -211,6 +223,51 @@ window.PK = window.PK || {};
       '..y......y..'
     ], { R: '#e02020', r: '#ff8080', W: '#e0e0ea', y: '#ffe060' });
 
+    DEFS.bats.icon = U.makeSprite([
+      '............',
+      '.b........b.',
+      '.bb..b.b.bb.',
+      '.bbb.bbbbbb.',
+      'bbbbbrbrbbbb',
+      'bbBbbbbbbBbb',
+      'bB.bbbbbb.Bb',
+      'b...bbbb...b',
+      '.....bb.....',
+      '..b......b..',
+      '.bbb....bbb.',
+      '..b......b..'
+    ], { b: '#3a1c4a', B: '#7a2a5a', r: '#ff3040' });
+
+    DEFS.phase.icon = U.makeSprite([
+      '....oooo....',
+      '..ooWWWWoo..',
+      '.oWWWWWWWWo.',
+      '.oWWWWWWWWo.',
+      'oWWkkWWkkWWo',
+      'oWWkkWWkkWWo',
+      'oWWWWWWWWWWo',
+      'oWWWWkkWWWWo',
+      'oWWWWWWWWWWo',
+      'oWWWWWWWWWWo',
+      'oWoWWoWWoWWo',
+      '.o..oo..oo.o'
+    ], { o: '#8aa4e0', W: '#eef4ff', k: '#3a4a7a' });
+
+    DEFS.teleport.icon = U.makeSprite([
+      '..mm....cc..',
+      '.m..m..c..c.',
+      'm.gg.mc.gg.c',
+      'm.gGg.cgGg.c',
+      'm.gg.mc.gg.c',
+      '.m..m..c..c.',
+      '..mm....cc..',
+      '.....ww.....',
+      '....w..w....',
+      '...wwwwww...',
+      '.....ww..k..',
+      '.k..........'
+    ], { m: '#ff30c0', c: '#30e8ff', g: '#10c070', G: '#60ffb0', w: '#f0fff8', k: '#60ffb0' });
+
     // ---- world sprites
     SPR.peel = U.makeSprite([
       '...kk...',
@@ -270,13 +327,23 @@ window.PK = window.PK || {};
     }, { y: '#ffe040', Y: '#c08000', w: '#ffffff' });
 
     SPR.wrap = bubbleSprite(5, { o: '#ff90d0', p: '#fff0fa', w: '#ffffff' });
+
+    // bat: wings up / wings down (7x4)
+    const batPal = { b: '#2a1438', B: '#5a2a6a', r: '#ff3040' };
+    SPR.bat[0] = U.makeSprite(['b.....b', 'bb.b.bb', '.BbrbB.', '...b...'], batPal);
+    SPR.bat[1] = U.makeSprite(['...b...', '.BbrbB.', 'bb...bb', 'b.....b'], batPal);
+    SPR.drop = U.makeSprite(['.r.', 'rRr', '.r.'], { r: '#e01830', R: '#ff7080' });
+    SPR.wisp = bubbleSprite(4, { o: '#b8c8f0', p: '#eef4ff', w: '#ffffff' });
+    SPR.gpx = ['#ff30c0', '#30e8ff', '#60ffb0', '#ffffff'].map((c) => U.makeSprite(['xx', 'xx'], { x: c }));
+    itemIcons();
     reset();
   }
 
   function reset() {
-    peels.length = 0; melons.length = 0; foams.length = 0;
+    peels.length = 0; melons.length = 0; foams.length = 0; swarms.length = 0; glitches.length = 0;
     kst = new Map();
     clock = 0;
+    magKart = null; magT = 0; saleT = 0;
     placeFoods();
   }
 
@@ -285,6 +352,8 @@ window.PK = window.PK || {};
   // for boost gauge; it respawns a few seconds later. Sprites are painted when the sheet loads.
   const FOOD_KO = ['사과', '바나나', '우유', '식빵', '소고기', '목살', '생선', '라면', '치즈', '케이크', '과자', '콜라', '컵케이크', '초코', '상추', '토마토'];
   const FOOD_GAUGE = 25, FOOD_RESPAWN = 6, FOOD_R = 6;
+  const FMAG_T = 6, FMAG_R = 70, FMAG_V = 150;   // shop item '음식 자석': duration / pull radius / speed
+  let magKart = null, magT = 0;
   const foods = [], foodSpr = [];
   const foodImg = new Image();
   function foodSprites() {
@@ -309,24 +378,63 @@ window.PK = window.PK || {};
       if (i < 24 || i > N - 24) continue;           // keep the start straight clear
       const a = t.TAN[i], p = t.PTS[i];
       for (const lat of [-11, 0, 11]) {
-        foods.push({ x: p[0] - Math.sin(a) * lat, y: p[1] + Math.cos(a) * lat, kind: Math.floor(r() * 16), t: 0, ph: r() * TAU });
+        const x = p[0] - Math.sin(a) * lat, y = p[1] + Math.cos(a) * lat;
+        foods.push({ x, y, hx: x, hy: y, kind: Math.floor(r() * 16), t: 0, ph: r() * TAU });
       }
     }
   }
+  // G.onFood(k, kind) (main.js) counts the player's foods as coins; AI karts only get the gauge
   function updateFoods(dt, ks, G) {
+    if (magT > 0) { magT -= dt; if (magT <= 0) magKart = null; }
     for (let i = 0; i < foods.length; i++) {
       const f = foods[i];
       if (f.t > 0) { f.t -= dt; continue; }
+      if (magKart) {   // item magnet: nearby food flies to the kart
+        const dx = magKart.x - f.x, dy = magKart.y - f.y, d = Math.hypot(dx, dy);
+        if (d < FMAG_R && d > 0.01) { const st = Math.min(d, FMAG_V * dt) / d; f.x += dx * st; f.y += dy * st; }
+      }
       for (let j = 0; j < ks.length; j++) {
         const k = ks[j], dx = k.x - f.x, dy = k.y - f.y;
         if (dx * dx + dy * dy > FOOD_R * FOOD_R) continue;
-        f.t = FOOD_RESPAWN;
+        f.t = FOOD_RESPAWN; f.x = f.hx; f.y = f.hy;
         addGauge(k, FOOD_GAUGE, G);
-        if (k.isPlayer) { sfx(G, 'pad'); if (G && typeof G.toast === 'function') G.toast(FOOD_KO[f.kind] + ' GET! +' + FOOD_GAUGE); }
+        if (k.isPlayer) {
+          sfx(G, 'pad');
+          if (G && typeof G.onFood === 'function') G.onFood(k, f.kind);
+          else if (G && typeof G.toast === 'function') G.toast('FOOD +' + FOOD_GAUGE);
+        }
         break;
       }
     }
   }
+  // time sale (main.js, once per race): every food back at once, a second row between the rows,
+  // near-instant respawns; the extra row goes away when the sale ends
+  let saleT = 0;
+  function startSale(dur) {
+    const t = T();
+    if (!t || !t.PTS || !foods.length) return;
+    saleT = dur;
+    for (let i = 0; i < foods.length; i++) foods[i].t = 0;
+    const N = t.N, rows = 9, r = PK.U.rng(99);
+    for (let j = 0; j < rows; j++) {
+      const i = Math.floor(N * (j + 1) / rows) % N;
+      if (i < 24 || i > N - 24) continue;
+      const a = t.TAN[i], p = t.PTS[i];
+      for (const lat of [-6, 6]) {
+        const x = p[0] - Math.sin(a) * lat, y = p[1] + Math.cos(a) * lat;
+        foods.push({ x, y, hx: x, hy: y, kind: Math.floor(r() * 16), t: 0, ph: r() * TAU, extra: true });
+      }
+    }
+  }
+  function updateSale(dt) {
+    if (!(saleT > 0)) return;
+    saleT -= dt;
+    for (let i = 0; i < foods.length; i++) if (foods[i].t > 0.4) foods[i].t = 0.4;
+    if (saleT <= 0) { saleT = 0; for (let i = foods.length - 1; i >= 0; i--) if (foods[i].extra) foods.splice(i, 1); }
+  }
+  const saleLeft = () => saleT;
+  const foodIcon = (i) => foodSpr[i | 0] || null;
+  const foodName = (i) => FOOD_KO[i | 0] || '';
 
   // ---------------------------------------------------------------- use
   function canUse(k, G) {
@@ -339,6 +447,11 @@ window.PK = window.PK || {};
   function tryUse(k, G) {
     if (!canUse(k, G)) return false;
     const id = k.def.skill, def = DEFS[id];
+    // teleport needs someone ahead to swap with; otherwise it isn't spent
+    if (id === 'teleport' && !useTeleport(k, G)) {
+      if (k.isPlayer && G && typeof G.toast === 'function') G.toast('ALREADY 1ST!');
+      return false;
+    }
     switch (id) {
       case 'cart_rush': useRush(k, G); break;
       case 'banana': useBanana(k, G); break;
@@ -346,6 +459,8 @@ window.PK = window.PK || {};
       case 'soap': useSoap(k, G); break;
       case 'bubble': useBubble(k, G); break;
       case 'magnet': useMagnet(k, G); break;
+      case 'bats': useBats(k, G); break;
+      case 'phase': usePhase(k, G); break;
     }
     k.skillCd = def.cooldown;
     S(k).readySince = -1;
@@ -450,6 +565,158 @@ window.PK = window.PK || {};
     }
   }
 
+  // bat swarm: launched just ahead of the vampire, then follows the track like a melon
+  function useBats(k, G) {
+    const t = T();
+    const c = Math.cos(k.a), s = Math.sin(k.a);
+    let fi = k.idx || 0, lat = k.lat || 0;
+    if (t && typeof t.nearestLocal === 'function') {
+      const n = t.nearestLocal(k.idx | 0, k.x + c * 6, k.y + s * 6, 12);
+      if (n) { fi = n.i; lat = n.lat; }
+    }
+    const lim = barrier() - 3;
+    const b = { fi, lat: PK.U.clamp(lat, -lim, lim), x: k.x + c * 6, y: k.y + s * 6, t: 0, owner: k,
+                speed: Math.max(175, (k.v || 0) + 120), target: magnetTarget(k, G) };
+    placeMelon(b);
+    swarms.push(b);
+    while (swarms.length > MAX_SWARMS) swarms.shift();
+  }
+
+  // phase: see-through for PHASE_T s — no kart collisions, immune to hits/hazards, small buff.
+  // fx.ghost is set too so every existing ghost check (collide, peels, melons, foam) skips the kart.
+  function usePhase(k) {
+    const fx = k.fx;
+    fx.phase = Math.max(fx.phase || 0, PHASE_T);
+    fx.ghost = Math.max(fx.ghost || 0, PHASE_T);
+    fx.slow = 0;
+    giveBuff(k, PHASE_T, PHASE_MUL);
+  }
+
+  // teleport: the race leader = unfinished kart with the most progress (same order as main.js standings)
+  function leaderOf(k, G) {
+    const ks = (G && G.karts) || [];
+    let best = null;
+    for (let i = 0; i < ks.length; i++) {
+      const o = ks[i];
+      if (o.finished) continue;
+      if (!best || o.prog > best.prog) best = o;
+    }
+    return best && best !== k && best.prog > k.prog ? best : null;
+  }
+  // swap where two karts are on the track: pose, speed and all lap bookkeeping (lap/maxLap/_mLap/
+  // lapStart travel with the track position, so nobody gains or loses a lap). Effects/skills stay.
+  const TELE_KEYS = ['x', 'y', 'a', 'ma', 'v', 'idx', 'lat', 'lap', 'maxLap', 'prog', '_mLap', 'lapStart', 'offroad', 'drift', 'driftDir', 'charge'];
+  function useTeleport(k, G) {
+    const o = leaderOf(k, G);
+    if (!o) return false;
+    for (let i = 0; i < TELE_KEYS.length; i++) { const f = TELE_KEYS[i], t = k[f]; k[f] = o[f]; o[f] = t; }
+    k.wrongT = 0; o.wrongT = 0; k.hop = o.hop = 0;
+    glitches.push({ x: k.x, y: k.y, t: TELE_FX }, { x: o.x, y: o.y, t: TELE_FX });
+    while (glitches.length > 8) glitches.shift();
+    if (k.isPlayer || o.isPlayer) sfx(G, 'glitch');
+    if (o.isPlayer && G && typeof G.toast === 'function') G.toast('GLITCHED!');
+    return true;
+  }
+
+  // ---------------------------------------------------------------- shop items (main.js: wallet, equip, one use per race)
+  // auto: fired by main.js at GO instead of the C key
+  const ITEMS = {
+    rocket: { nameKo: '로켓 스타트', price: 6, auto: true, desc: '출발 신호와 동시에 자동으로 2초 로켓 부스트', icon: null },
+    turbo: { nameKo: '터보 캔', price: 8, desc: '한 모금에 1.5초 초강력 부스트 (부스터보다 빠름)', icon: null },
+    magnet: { nameKo: '음식 자석', price: 8, desc: '6초간 주변 음식을 끌어당긴다 (레이스당 10개 제한은 그대로)', icon: null },
+    banana: { nameKo: '바나나 폭탄', price: 10, desc: '뒤로 바나나 껍질 5개를 넓게 뿌린다', icon: null },
+    shield: { nameKo: '방패', price: 12, desc: '8초간 공격·껍질을 1번 막아 준다', icon: null },
+    cloak: { nameKo: '유령 망토', price: 15, desc: '3초간 투명해져 카트와 공격을 통과하고 빨라진다', icon: null }
+  };
+  const ITEM_IDS = Object.keys(ITEMS);
+  function itemIcons() {
+    const U = PK.U;
+    ITEMS.rocket.icon = U.makeSprite([
+      '.....ww.....',
+      '....wRRw....',
+      '....RRRR....',
+      '....RbbR....',
+      '....RbbR....',
+      '....RRRR....',
+      '...RRRRRR...',
+      '..RR.RR.RR..',
+      '.....yy.....',
+      '....yooy....',
+      '.....oo.....',
+      '.....y......'
+    ], { R: '#e83030', w: '#ffd0d0', b: '#60c0ff', y: '#ffe040', o: '#ff8800' });
+    ITEMS.turbo.icon = U.makeSprite([
+      '....kkkk....',
+      '...gggggg...',
+      '...GGGGGG...',
+      '...GyyyyG...',
+      '...GGGyGG...',
+      '...GGyGGG...',
+      '...GyyyyG...',
+      '...GGGyGG...',
+      '...GGyGGG...',
+      '...GGGGGG...',
+      '...gggggg...',
+      '....kkkk....'
+    ], { k: '#c8c8d8', g: '#70e070', G: '#20a040', y: '#ffe040' });
+    ITEMS.magnet.icon = DEFS.magnet.icon;
+    ITEMS.banana.icon = U.makeSprite([
+      '..k.....k...',
+      '.yy....yy...',
+      'yYy...yYy...',
+      'Y.Y...Y.Y...',
+      '............',
+      '.....k......',
+      '....yy....k.',
+      '...yYy...yy.',
+      '...Y.Y..yYy.',
+      '........Y.Y.',
+      '.oo.oo.oo...',
+      'o..o..o..o..'
+    ], { y: '#ffe040', Y: '#c09010', k: '#604010', o: '#ff8800' });
+    ITEMS.shield.icon = U.makeSprite([
+      '.bbbbbbbbbb.',
+      'bBBBBBBBBBBb',
+      'bBwwBBBBBBBb',
+      'bBwBBByBBBBb',
+      'bBBBByyyBBBb',
+      'bBBByyyyyBBb',
+      'bBBBByyyBBBb',
+      '.bBBBByBBBb.',
+      '.bBBBBBBBBb.',
+      '..bBBBBBBb..',
+      '...bBBBBb...',
+      '....bbbb....'
+    ], { b: '#203880', B: '#4080e0', w: '#c0e0ff', y: '#ffe040' });
+    ITEMS.cloak.icon = DEFS.phase.icon;
+  }
+
+  // fire a shop item for kart k; returns true when it went off (main.js then consumes it)
+  function useItem(k, id, G) {
+    if (!k || !ITEMS[id] || k.finished || k.fx.spin > 0) return false;
+    switch (id) {
+      case 'rocket': k.boostT = Math.max(k.boostT || 0, 2.0); giveBuff(k, 2.0, 1.1); sfx(G, 'boost'); break;
+      case 'turbo': k.boostT = Math.max(k.boostT || 0, 1.5); giveBuff(k, 1.5, 1.22); sfx(G, 'boost'); break;
+      case 'magnet': magKart = k; magT = FMAG_T; sfx(G, 'skill'); break;
+      case 'banana': {
+        const c = Math.cos(k.a), s = Math.sin(k.a);
+        for (let j = 0; j < 5; j++) {
+          const back = 8 + (j & 1) * 4, side = (j - 2) * 5;
+          const p = { x: k.x - c * back - s * side, y: k.y - s * back + c * side, age: 0, owner: k };
+          clampToRoad(k, p, 2);
+          peels.push(p);
+        }
+        while (peels.length > MAX_PEELS) peels.shift();
+        sfx(G, 'skill');
+        break;
+      }
+      case 'shield': k.fx.shield = Math.max(k.fx.shield || 0, 8); S(k).wrapT = 8; sfx(G, 'skill'); break;
+      case 'cloak': usePhase(k); sfx(G, 'skill'); break;
+    }
+    return true;
+  }
+  const itemMagnet = () => (magT > 0 ? magT : 0);
+
   // ---------------------------------------------------------------- update
   function placeMelon(m) {
     const t = T();
@@ -469,6 +736,8 @@ window.PK = window.PK || {};
     const ks = (G && G.karts) || [];
     const t = T();
     updateFoods(dt, ks, G);
+    updateSale(dt);
+    for (let i = glitches.length - 1; i >= 0; i--) { glitches[i].t -= dt; if (glitches[i].t <= 0) glitches.splice(i, 1); }
 
     // cooldowns + per-kart timed effects
     for (let i = 0; i < ks.length; i++) {
@@ -480,6 +749,7 @@ window.PK = window.PK || {};
       if (s.soapCd > 0) s.soapCd -= dt;
       if (s.wrapT > 0) { s.wrapT -= dt; if (!(k.fx.shield > 0)) s.wrapT = 0; }
       if (s.coinT > 0) s.coinT -= dt;
+      if (s.drainT > 0) { s.drainT -= dt; if (s.drainT <= 0) s.drainFrom = null; }
 
       // cart rush: ram karts in front / at the side
       if (s.rushT > 0) {
@@ -579,6 +849,59 @@ window.PK = window.PK || {};
       }
     }
 
+    // bat swarms: chase the target kart ahead (re-acquire if lost/passed), stun + drain gauge
+    if (t && t.PTS) {
+      const N = t.N, lim = barrier() - 2;
+      for (let i = swarms.length - 1; i >= 0; i--) {
+        const b = swarms[i];
+        b.t += dt;
+        if (b.t > BAT_LIFE) { swarms.splice(i, 1); continue; }
+        let tg = b.target;
+        if (!tg || tg.finished || tg.fx.phase > 0 || idxAhead(b.fi, tg.idx || 0, N) > N * 0.5) {
+          tg = null; let bd = 60;
+          for (let j = 0; j < ks.length; j++) {
+            const k = ks[j];
+            if (k === b.owner || k.finished || k.fx.phase > 0) continue;
+            const d = idxAhead(b.fi, k.idx || 0, N);
+            if (d < bd) { bd = d; tg = k; }
+          }
+          b.target = tg;
+        }
+        const dx = tg ? tg.x - b.x : 0, dy = tg ? tg.y - b.y : 0;
+        if (tg && dx * dx + dy * dy < 22 * 22) {
+          // close: fly straight at it
+          const dd = Math.hypot(dx, dy) || 1, st = Math.min(dd, b.speed * dt);
+          b.x += dx / dd * st; b.y += dy / dd * st;
+          b.fi = tg.idx || b.fi; b.lat = tg.lat || 0;
+        } else {
+          if (tg) b.lat += PK.U.clamp((tg.lat || 0) - b.lat, -8, 8) * 4 * dt;
+          b.lat = PK.U.clamp(b.lat, -lim, lim);
+          const i0 = wrapI(Math.floor(b.fi), N);
+          const p0 = t.PTS[i0], p1 = t.PTS[(i0 + 1) % N];
+          const seg = Math.max(0.5, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]));
+          b.fi += (b.speed * dt) / seg;
+          if (b.fi >= N) b.fi -= N;
+          placeMelon(b);
+        }
+        for (let j = 0; j < ks.length; j++) {
+          const k = ks[j];
+          if (k === b.owner || k.fx.ghost > 0 || k.fx.phase > 0) continue;
+          const ex = k.x - b.x, ey = k.y - b.y;
+          if (ex * ex + ey * ey < BAT_R * BAT_R) {
+            if (hitKart(k, 'spin', BAT_STUN, G, b.owner)) {
+              k.fx.slow = Math.max(k.fx.slow || 0, 1.0);   // groggy after the stun
+              const amt = Math.min(BAT_STEAL, Math.max(0, k.gauge || 0));
+              k.gauge = (k.gauge || 0) - amt;
+              addGauge(b.owner, amt, G);
+              const so = S(b.owner); so.drainT = DRAIN_T; so.drainFrom = k;
+            }
+            swarms.splice(i, 1);
+            break;
+          }
+        }
+      }
+    }
+
     // soap foam
     for (let i = foams.length - 1; i >= 0; i--) {
       const f = foams[i];
@@ -657,6 +980,29 @@ window.PK = window.PK || {};
         if (gap < 0.12 * N && (tg.gauge || 0) >= 15) return rnd() < 3 * e * pf * 6;
         return rnd() < 0.4 * e * pf;
       }
+      case 'bats': {
+        const tg = magnetTarget(k, G);
+        if (!tg || tg.fx.phase > 0) return false;
+        const gap = tg.prog - k.prog;
+        if (gap < 0.1 * N) return rnd() < ((tg.gauge || 0) >= 15 ? 3 : 1.5) * e * pf * 6;
+        return rnd() < 0.3 * e * pf;
+      }
+      case 'teleport': {
+        // only when not leading and the leader is within reach (0.35 lap); more eager late in the race
+        const ld = leaderOf(k, G);
+        if (!ld || ld.prog - k.prog > 0.35 * N) return false;
+        const late = (k.lap || 0) >= ((PK.C && PK.C.LAPS) || 3);
+        return rnd() < (late ? 2 : 0.6) * e * pf;
+      }
+      case 'phase': {
+        if (k.fx.phase > 0) return false;
+        if (dangerNear(k, c, sn)) return rnd() < 6 * pf * 6;
+        // boxed in by a kart right ahead -> phase through it
+        if (aheadF < 14 && Math.abs(aheadSide) < 6) return rnd() < 3 * e * pf * 6;
+        let pos = 1;
+        for (let i = 0; i < ks.length; i++) if (ks[i] !== k && ks[i].prog > k.prog) pos++;
+        return pos > 2 && rnd() < 0.25 * e * pf;
+      }
     }
     return false;
   }
@@ -680,6 +1026,12 @@ window.PK = window.PK || {};
       if (m.owner === k) continue;
       const dx = m.x - k.x, dy = m.y - k.y;
       if (dx * dx + dy * dy < 45 * 45) return true;
+    }
+    for (let i = 0; i < swarms.length; i++) {
+      const b = swarms[i];
+      if (b.owner === k) continue;
+      const dx = b.x - k.x, dy = b.y - k.y;
+      if (b.target === k && dx * dx + dy * dy < 60 * 60) return true;
     }
     return false;
   }
@@ -712,12 +1064,45 @@ window.PK = window.PK || {};
              SPR.foam[L.v], (2.6 + 1.6 * L.s) * (0.4 + 0.6 * fade) * (0.5 + 0.5 * f.r / FOAM_R));
       }
     }
+    // teleport: pixel scatter bursting out of both swap points
+    for (let i = 0; i < glitches.length; i++) {
+      const g = glitches[i], u = 1 - g.t / TELE_FX;
+      for (let j = 0; j < 10; j++) {
+        const an = j * 2.39996 + i, rr = (1.5 + (j % 4)) * (0.4 + u * 1.6);
+        emit(g.x + Math.cos(an) * rr, g.y + Math.sin(an) * rr, 1 + ((j * 7) % 9) * (0.5 + u), SPR.gpx[(j + ((clock * 20) | 0)) & 3], 1.3 * (1 - u * 0.5));
+      }
+    }
+    // bat swarm: 5 flapping bats circling the flock centre
+    for (let i = 0; i < swarms.length; i++) {
+      const b = swarms[i];
+      for (let j = 0; j < 5; j++) {
+        const an = b.t * 7 + j * (TAU / 5), rr = 2 + (j & 1) * 1.5;
+        const fl = (((b.t * 14) | 0) + j) & 1;
+        emit(b.x + Math.cos(an) * rr, b.y + Math.sin(an) * rr, 4 + Math.sin(b.t * 9 + j) * 1.5 + (j % 3), SPR.bat[fl], 2.2);
+      }
+    }
     kst.forEach((s, k) => {
+      if (s.drainT > 0 && s.drainFrom) {   // blood drops drifting from the victim to the vampire
+        const v = s.drainFrom;
+        for (let j = 0; j < 4; j++) {
+          const u = (DRAIN_T - s.drainT) / DRAIN_T * 1.6 - j * 0.2;
+          if (u < 0 || u > 1) continue;
+          emit(v.x + (k.x - v.x) * u, v.y + (k.y - v.y) * u, 4 + Math.sin(u * Math.PI) * 6, SPR.drop, 1.4);
+        }
+      }
+      if (k.fx.phase > 0) {   // faint wisps trailing the phased ghost
+        const c = Math.cos(k.a), sn = Math.sin(k.a);
+        for (let j = 0; j < 3; j++) {
+          const u = (clock * 1.5 + j / 3) % 1;
+          emit(k.x - c * (3 + u * 9) + Math.sin(clock * 5 + j * 2) * 1.5 * -sn, k.y - sn * (3 + u * 9) + Math.sin(clock * 5 + j * 2) * 1.5 * c,
+               3 + u * 4, SPR.wisp, 1.6 * (1 - u * 0.6));
+        }
+      }
       if (s.rushT > 0) {
         const c = Math.cos(k.a), sn = Math.sin(k.a);
         emit(k.x + c * 5.5, k.y + sn * 5.5, 0, SPR.cart, 7);
       }
-      if (s.magT > 0) {
+      if (s.magT > 0 || (k === magKart && magT > 0)) {
         emit(k.x, k.y, 9 + Math.sin(clock * 12) * 0.4, SPR.magnet, 4);
         if (s.coinT > 0 && s.magTarget) {
           const tg = s.magTarget;
@@ -739,5 +1124,5 @@ window.PK = window.PK || {};
     return out;
   }
 
-  PK.Skills = { DEFS, init, reset, tryUse, update, aiWants, sprites };
+  PK.Skills = { DEFS, ITEMS, ITEM_IDS, init, reset, tryUse, useItem, itemMagnet, startSale, saleLeft, foodIcon, foodName, update, aiWants, sprites };
 })(window.PK);

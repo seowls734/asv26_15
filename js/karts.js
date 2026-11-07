@@ -22,6 +22,11 @@ window.PK = window.PK || {};
   const KART_R = 4;             // collision radius
   const RESTITUTION = 0.45;
   const GAUGE_MAX = 100, STOCK_MAX = 2;
+  // drift combo: a new drift within COMBO_WIN s of the last one steps the combo (max x5); each step
+  // adds COMBO_STEP to the drift gauge multiplier. A fizzled drift, a hit or a long straight resets it.
+  const COMBO_WIN = 1.2, COMBO_MAX = 5, COMBO_STEP = 0.25;
+  // slipstream: tucked 6..18 units behind a kart going the same way for SLIP_CHARGE s, then pull out
+  const SLIP_MIN = 6, SLIP_MAX = 18, SLIP_SIDE = 4.5, SLIP_CHARGE = 1.0, SLIP_BUFF = 1.4, SLIP_MUL = 1.12;
 
   // ---------------------------------------------------------------------------
   // Kart definitions. Stats are derived from weight (1 light .. 5 heavy):
@@ -31,6 +36,8 @@ window.PK = window.PK || {};
   //   grip     = 6.4 + w*0.4        (6.8 .. 8.4 /s)        heavy = more planted
   //   mass     = 50 + w*30          (80 .. 200 kg)
   //   boostPow = 1.48 - w*0.03      (1.45 .. 1.33)         light gets a stronger boost
+  // Optional extras: tune {stat: delta} on top of the formula, grip = grip colour,
+  // ch = character driver shown for both AI and player (see CHARS).
   // ---------------------------------------------------------------------------
   const RAW = [
     { name: 'RED', nameKo: '레드', color: '#e03a3a', weight: 3, skill: 'cart_rush', desc: '속도와 핸들링이 균형 잡힌 올라운더 카트' },
@@ -38,21 +45,36 @@ window.PK = window.PK || {};
     { name: 'GRN', nameKo: '그린', color: '#3cb84a', weight: 4, skill: 'watermelon', desc: '묵직하고 최고 속도가 높은 파워 카트' },
     { name: 'YEL', nameKo: '옐로', color: '#f2c82c', weight: 1, skill: 'soap', desc: '가볍고 코너링이 날카로운 초경량 카트' },
     { name: 'PNK', nameKo: '핑크', color: '#f06aa8', weight: 2, skill: 'bubble', desc: '민첩한 가속과 부드러운 드리프트의 카트' },
-    { name: 'BLK', nameKo: '블랙', color: '#2a2a33', weight: 5, skill: 'magnet', desc: '최고 속도와 몸싸움 최강, 대신 굼뜬 중전차' }
+    { name: 'BLK', nameKo: '블랙', color: '#2a2a33', weight: 5, skill: 'magnet', desc: '최고 속도와 몸싸움 최강, 대신 굼뜬 중전차' },
+    // World 2 characters
+    { name: 'VAMP', nameKo: '뱀파이어', color: '#8a1c2b', weight: 4, skill: 'bats', ch: 'vamp', grip: '#e8c040',
+      tune: { maxV: 4, acc: 8 }, desc: '묵직한 차체에 날카로운 가속, 밤을 달리는 귀족 카트' },
+    { name: 'GHOST', nameKo: '유령', color: '#b8c8f0', weight: 1, skill: 'phase', ch: 'ghost', grip: '#eef4ff',
+      tune: { mass: -15, turn: 0.1, grip: -0.3, boostPow: 0.02 }, desc: '깃털처럼 가볍고 둥실둥실 미끄러지는 초민첩 카트' },
+    // secret: won by finishing 1st on the glitch map
+    { name: 'GLITCH', nameKo: '글리치', color: '#00e8b8', weight: 3, skill: 'teleport', ch: 'glitch', grip: '#ff40d0',
+      tune: { maxV: 4, acc: 8, turn: 0.08 }, desc: '버그로 태어난 카트. 모든 능력이 평균 이상, 가끔 화면이 깨진다' }
   ];
   const DEFS = RAW.map((r, i) => {
-    const w = r.weight;
-    return {
+    const w = r.weight, t = r.tune || {};
+    const st = (key, v) => +(v + (t[key] || 0)).toFixed(2);
+    const d = {
       id: i, name: r.name, nameKo: r.nameKo, color: r.color, weight: w,
-      mass: 50 + w * 30,
-      maxV: 138 + w * 5,
-      acc: 150 - w * 14,
-      turn: +(2.75 - w * 0.12).toFixed(2),
-      grip: +(6.4 + w * 0.4).toFixed(2),
-      boostPow: +(1.48 - w * 0.03).toFixed(2),
+      mass: st('mass', 50 + w * 30),
+      maxV: st('maxV', 138 + w * 5),
+      acc: st('acc', 150 - w * 14),
+      turn: st('turn', 2.75 - w * 0.12),
+      grip: st('grip', 6.4 + w * 0.4),
+      boostPow: st('boostPow', 1.48 - w * 0.03),
       skill: r.skill, desc: r.desc
     };
+    if (r.ch) d.ch = r.ch;
+    if (r.grip) d.gripCol = r.grip;
+    return d;
   });
+  // Kart line-up per world (indices into DEFS). main.js uses ROSTER[world] for the kart
+  // select and the race grid. World 2 drops YEL/PNK and adds VAMP/GHOST.
+  const ROSTER = { 1: [0, 1, 2, 3, 4, 5], 2: [0, 1, 2, 5, 6, 7] };
 
   // ---------------------------------------------------------------------------
   // Sprites: shopping cart (assets/cart.png, 48x49, seen from behind) with a driver
@@ -101,13 +123,98 @@ window.PK = window.PK || {};
   ];
   const DRV_X = (SW - 26) >> 1;
 
+  // character drivers (26 wide, same row counts as DRV_HEAD / DRV_BODY).
+  // sym(edge, mid): edge mirrored on both sides, mid centred with dots.
+  const sym = (e, m) => {
+    const n = 26 - e.length * 2 - m.length, p = n >> 1;
+    return e + rep('.', p) + m + rep('.', n - p) + e.split('').reverse().join('');
+  };
+  // vampire: H slicked hair, h shine, e/E pale pointed ear, k pale neck, C cape collar, c red lining, P cape fold
+  const VAMP_HEAD = [
+    sym('', 'HHhhhhHH'),
+    sym('', 'HHHHHhhHHHHH'),
+    sym('', 'HHHHHHhhHHHHHH'),
+    sym('c', 'HHhHHHhhHHHhHH'),
+    sym('Cc', 'HHHhHHHhhHHHhHHH'),
+    sym('Cc', 'eHHHHhHHhhHHhHHHHe'),
+    sym('CCc', 'eeHHHHHhHhhHhHHHHHee'),
+    sym('CCc', 'EeHHHHHHhhhhHHHHHHeE'),
+    sym('CCCc', 'EHHHHHHHHHHHHHHHHE'),
+    sym('CCCCc', 'HHHHHHHHHHHHHHHH'),
+    sym('CCCCCc', 'HHHHHHHHHHHHHH'),
+    sym('CCCCCCc', 'HHHHHhhHHHHH'),
+    sym('CCCCCCCc', 'kkkkkkkkkk'),
+    sym('CCCCCCCCC', 'CCCCCCCC')
+  ];
+  const VAMP_BODY = [
+    sym('', rep('C', 20)),
+    sym('c', rep('C', 11) + 'PP' + rep('C', 11)),
+    sym('cP', rep('C', 10) + 'PP' + rep('C', 10)),
+    sym('cP', rep('C', 10) + 'PP' + rep('C', 10)),
+    sym('ccP', rep('C', 9) + 'PP' + rep('C', 9)),
+    sym('ccP', rep('C', 9) + 'PP' + rep('C', 9)),
+    sym('ccPP', rep('C', 8) + 'PP' + rep('C', 8)),
+    sym('ccPP', rep('C', 8) + 'PP' + rep('C', 8))
+  ];
+  // ghost: o pale outline, W sheet, w sheet shade, g faint glow (all slightly see-through)
+  const GHOST_HEAD = [
+    sym('', 'oo..oo..oo'),
+    sym('', 'oWWooWWooWWo'),
+    sym('', 'oWWWWWWWWWWWWo'),
+    sym('g', 'oWWWWWWWWWWWWWWo'),
+    sym('', 'oWWWWWWWWWWWWWWWWo'),
+    sym('', 'oWWWWWWWWWWWWWWWWo'),
+    sym('', 'oWWWWWWWWWWWWWWWWo'),
+    sym('', 'owWWWWWWWWWWWWWWwo'),
+    sym('.g', 'owwWWWWWWWWWWWWwwo'),
+    sym('', 'owwwWWWWWWWWWWwwwo'),
+    sym('', 'owwwwWWWWWWwwwwo'),
+    sym('', 'owwwwwwwwwwwwo'),
+    sym('', 'owwwwwwwwwwwwwwo'),
+    sym('', 'owwwwwwwwwwwwwwwwo')
+  ];
+  const GHOST_BODY = [
+    sym('', 'o' + rep('w', 18) + 'o'),
+    sym('', 'o' + rep('W', 20) + 'o'),
+    sym('', 'o' + rep('W', 22) + 'o'),
+    sym('', 'o' + rep('W', 24) + 'o'),
+    sym('o', rep('W', 11) + 'ww' + rep('W', 11)),
+    sym('o', 'w' + rep('W', 10) + 'ww' + rep('W', 10) + 'w'),
+    sym('o', rep('w', 24)),
+    sym('', 'ow..owwo..owwo..owwo..wo')
+  ];
+  // glitch: the normal driver silhouette filled with corrupted noise (g/G green, m magenta, c cyan, w white,
+  // k black), a few rows torn sideways; paint() adds magenta/cyan ghost copies (split: true)
+  const glitchRows = (mask, seed, tear) => mask.map((r, y) => {
+    let s = '';
+    for (let x = 0; x < r.length; x++) {
+      if (r[x] === '.') { s += '.'; continue; }
+      const h = ((x * 7 + y * 13 + seed) * 2654435761 >>> 0) % 23;
+      s += h < 9 ? 'g' : h < 14 ? 'G' : h < 17 ? 'k' : h < 19 ? 'm' : h < 21 ? 'c' : 'w';
+    }
+    const sh = tear[y] || 0;   // torn scanline: shift the row
+    return sh > 0 ? rep('.', sh) + s.slice(0, s.length - sh) : sh < 0 ? s.slice(-sh) + rep('.', -sh) : s;
+  });
+  const GLITCH_HEAD = glitchRows(DRV_HEAD, 5, { 3: 2, 4: 2, 9: -2, 10: -1 }).map((r, y) => (y === 6 ? r.replace(/[gGkmw]/g, 'c') : r));
+  const GLITCH_BODY = glitchRows(DRV_BODY, 11, { 2: -2, 5: 1 });
+  const CHARS = {
+    glitch: { head: GLITCH_HEAD, body: GLITCH_BODY, split: true,
+      pal: { g: '#10c070', G: '#60ffb0', k: '#081010', m: '#ff30c0', c: '#30e8ff', w: '#f0fff8' } },
+    vamp: { head: VAMP_HEAD, body: VAMP_BODY,
+      pal: { H: '#16121e', h: '#3e3850', e: '#ece4f2', E: '#b8acc8', k: '#d8d0e4', C: '#1c0e16', P: '#2e1424', c: '#c0182e' } },
+    ghost: { head: GHOST_HEAD, body: GHOST_BODY,
+      pal: { o: 'rgba(150,178,236,0.9)', W: 'rgba(246,249,255,0.86)', w: 'rgba(200,214,244,0.82)', g: 'rgba(214,236,255,0.6)' } }
+  };
+  const PHASE_ALPHA = 0.42;   // phased (유령화) frames are pre-faded copies at this alpha
+
   const SPR = [];     // SPR[defIndex] = [left, center, right], driven by an everyday shopper
   const SPR_ME = [];  // same karts driven by the cutscene hero (the player)
   const SPR_EMPTY = []; // SPR_EMPTY[defIndex] = straight-on cart with nobody in it (parked carts in cutscenes)
+  const SPR_PHASE = []; // SPR_PHASE[defIndex] = faded [l, c, r] for karts with the 'phase' skill (else undefined)
   // drivers: [hair, shirt, skin]. ME matches PAL_ME in intro.js.
   const ME = ['#3b2a20', '#7d8592', '#f1c9a0'];
   const SHOPPERS = [['#1c1c22', '#c8504a'], ['#7a5232', '#3a8a5a'], ['#d8b860', '#4a6ab8'], ['#8a8a90', '#b85a9a'], ['#2a1a10', '#e0a030'], ['#5a3420', '#5a5a66']];
-  const JOBS = [];    // {cv, d, drv, dx} — repainted when the cart image arrives (drv null = empty cart)
+  const JOBS = [];    // {cv, d, drv, dx, fcv?} — repainted when the cart image arrives (drv null = empty cart, fcv = faded copy)
   let IMG = null, imgOk = false;
 
   const mixW = (h, t) => {   // blend toward white by t
@@ -124,7 +231,7 @@ window.PK = window.PK || {};
   // per-kart cart colours: bar, grips (BLK = gunmetal bar, gold grips)
   function cartPal(d) {
     const U = PK.U, blk = d.name === 'BLK';
-    const bar = blk ? '#5a5a68' : d.color, grip = blk ? '#e8c040' : d.color;
+    const bar = blk ? '#5a5a68' : d.color, grip = blk ? '#e8c040' : d.gripCol || d.color;
     const p = (c) => ({ L: mixW(c, 0.35), M: c, m: U.darken(c, 0.86), D: U.darken(c, 0.68), d: U.darken(c, 0.52) });
     return { bar: p(bar), grip: p(grip), hub: mixW(grip, 0.45), hubD: U.darken(grip, 0.85) };
   }
@@ -156,9 +263,16 @@ window.PK = window.PK || {};
     if (img) g.drawImage(img, 0, CART_Y); else fallbackCart(g, cp, CART_Y);
     // driver: body shifts 2px, head 4px into the lean (tilt)
     if (j.drv) {
-      const dp = drvPal(j.drv);
-      blit(g, DRV_BODY, dp, DRV_X + dx * 2, DRV_HEAD.length);
-      blit(g, DRV_HEAD, dp, DRV_X + dx * 4, 0);
+      const C = j.d.ch && CHARS[j.d.ch];
+      const dp = C ? C.pal : drvPal(j.drv), hd = C ? C.head : DRV_HEAD, bd = C ? C.body : DRV_BODY;
+      if (C && C.split) {   // chromatic ghost copies, offset left/right
+        const one = (col) => { const p = {}; for (const ch in dp) p[ch] = col; return p; };
+        const pm = one('rgba(255,40,200,0.55)'), pc = one('rgba(40,230,255,0.55)');
+        blit(g, bd, pm, DRV_X + dx * 2 - 2, hd.length); blit(g, hd, pm, DRV_X + dx * 4 - 2, 0);
+        blit(g, bd, pc, DRV_X + dx * 2 + 2, hd.length + 1); blit(g, hd, pc, DRV_X + dx * 4 + 2, 1);
+      }
+      blit(g, bd, dp, DRV_X + dx * 2, hd.length);
+      blit(g, hd, dp, DRV_X + dx * 4, 0);
     }
     // handle bar back on top (crosses the driver's neck)
     if (img) g.drawImage(img, 0, 0, SW, 8, 0, CART_Y, SW, 8);
@@ -176,6 +290,12 @@ window.PK = window.PK || {};
       g.fillStyle = cp.hub; g.fillRect(7, CART_Y + 41, 4, 1); g.fillRect(37, CART_Y + 41, 5, 1);
       g.fillStyle = cp.hubD; g.fillRect(6, CART_Y + 41, 1, 1);
     }
+    if (j.fcv) {   // faded copy for the phase skill
+      const f = j.fcv.getContext('2d');
+      f.imageSmoothingEnabled = false;
+      f.clearRect(0, 0, SW, SH);
+      f.globalAlpha = PHASE_ALPHA; f.drawImage(j.cv, 0, 0); f.globalAlpha = 1;
+    }
   }
 
   function loadImg() {
@@ -190,17 +310,21 @@ window.PK = window.PK || {};
     if (!PK.U || typeof document === 'undefined') return;
     loadImg();
     if (IMG && IMG.complete && IMG.naturalWidth) imgOk = true;
-    SPR.length = 0; SPR_ME.length = 0; SPR_EMPTY.length = 0; JOBS.length = 0;
+    SPR.length = 0; SPR_ME.length = 0; SPR_EMPTY.length = 0; SPR_PHASE.length = 0; JOBS.length = 0;
+    const mk = () => { const c = document.createElement('canvas'); c.width = SW; c.height = SH; return c; };
     for (const d of DEFS) {
+      const fade = d.skill === 'phase' ? [] : null;
       const build = (drv) => [-1, 0, 1].map((dx) => {
-        const cv = document.createElement('canvas');
-        cv.width = SW; cv.height = SH;
+        const cv = mk();
         const j = { cv, d, drv, dx };
+        if (fade) { j.fcv = mk(); fade.push(j.fcv); }
         JOBS.push(j); paint(j);
         return cv;
       });
       SPR.push(build(SHOPPERS[d.id % SHOPPERS.length]));
-      SPR_ME.push(build(ME));
+      // character karts (d.ch) show the same driver for AI and player -> share the frames
+      SPR_ME.push(d.ch ? SPR[d.id] : build(ME));
+      SPR_PHASE[d.id] = fade ? fade.slice(0, 3) : undefined;
       // empty cart: one straight-on canvas, same size, painted/repainted like the others
       const ecv = document.createElement('canvas');
       ecv.width = SW; ecv.height = SH;
@@ -235,13 +359,14 @@ window.PK = window.PK || {};
       boostT: 0, gauge: 0, stock: 0,
       steerIn: 0, finished: false, finishTime: 0, lapStart: 0, lapTimes: [], wrongT: 0,
       skillCd: 0,
-      fx: { spin: 0, slow: 0, shield: 0, buff: 0, buffMul: 1, ghost: 0 },
+      fx: { spin: 0, slow: 0, shield: 0, buff: 0, buffMul: 1, ghost: 0, phase: 0 },   // phase = 유령화 timer
       spinA: 0,
       ai: { lane: clamp(lat * 0.6, -roadHalf, roadHalf), phase: Math.random() * TAU, skill: 0.9, rubber: 1,
             stuckT: 0, revT: 0, driftCd: 0, wantDrift: false, t: 0 },
       prev: { drift: false, boost: false, skill: false },
       // internal (underscore = private to karts.js)
-      _hopV: 0, _bumpT: 0, _onPad: false, _puddle: false, _topV: 0
+      combo: 0, slipT: 0,   // drift combo step (0 = none) / slipstream charge time (>= SLIP_CHARGE = ready)
+      _hopV: 0, _bumpT: 0, _obsT: 0, obsHits: 0, _onPad: false, _puddle: false, _topV: 0, _sinceDrift: 99
     };
   }
 
@@ -276,23 +401,27 @@ window.PK = window.PK || {};
     const spinning = fx.spin > 0;
     if (spinning) { steerRaw = 0; gas = false; brake = false; driftBtn = false; }
     steerRaw = clamp(steerRaw, -1, 1);
-    // smooth steering (digital keys -> analog feel)
-    const sr = 9 * dt;
+    // smooth steering (digital keys -> analog feel): ramp in at 7/s, settle back faster (12/s)
+    const back = Math.abs(steerRaw) < Math.abs(k.steerIn) || steerRaw * k.steerIn < 0;
+    const sr = (back ? 12 : 7) * dt;
     k.steerIn += clamp(steerRaw - k.steerIn, -sr, sr);
     const steer = k.steerIn;
+    const centred = Math.abs(steerRaw) < 0.1;
 
     // ---- status effect timers ----
     if (fx.spin > 0) { fx.spin -= dt; k.spinA += 16 * dt; if (fx.spin <= 0) { fx.spin = 0; k.spinA = 0; } }
     if (fx.slow > 0) fx.slow = Math.max(0, fx.slow - dt);
     if (fx.shield > 0) fx.shield = Math.max(0, fx.shield - dt);
     if (fx.ghost > 0) fx.ghost = Math.max(0, fx.ghost - dt);
+    if (fx.phase > 0) fx.phase = Math.max(0, fx.phase - dt);
     if (fx.buff > 0) { fx.buff = Math.max(0, fx.buff - dt); if (fx.buff === 0) fx.buffMul = 1; }
     if (k.boostT > 0) k.boostT = Math.max(0, k.boostT - dt);
     if (k._bumpT > 0) k._bumpT -= dt;
+    if (k._obsT > 0) k._obsT -= dt;
 
     // ---- surface checks ----
     let inPuddle = false;
-    if (T && T.puddles) {
+    if (T && T.puddles && !(fx.phase > 0)) {   // phased karts float over puddles
       for (let i = 0; i < T.puddles.length; i++) {
         const p = T.puddles[i], dx = k.x - p.x, dy = k.y - p.y;
         if (dx * dx + dy * dy < p.r * p.r) { inPuddle = true; break; }
@@ -332,14 +461,18 @@ window.PK = window.PK || {};
     if (!k.drift) {
       if (driftBtn && Math.abs(steer) > 0.3 && k.v > DRIFT_MIN_V && !inPuddle) {
         k.drift = true; k.driftDir = steer > 0 ? 1 : -1; k.charge = 0;
-      }
+        k.combo = k.combo > 0 && k._sinceDrift < COMBO_WIN ? Math.min(COMBO_MAX, k.combo + 1) : 1;      }
+      k._sinceDrift += dt;
+      if (k._sinceDrift > COMBO_WIN) k.combo = 0;   // straight too long: chain broken
     } else if (!driftBtn || k.v < DRIFT_END_V || spinning) {
       // release -> mini-turbo
+      const cm = 1 + COMBO_STEP * Math.max(0, k.combo - 1);
       if (!spinning && k.v >= DRIFT_END_V) {
-        if (k.charge >= MT_BIG) { k.boostT = Math.max(k.boostT, 1.0); addGauge(k, 12, G); sfx(G, k, 'boost'); }
-        else if (k.charge >= MT_SMALL) { k.boostT = Math.max(k.boostT, 0.5); addGauge(k, 6, G); sfx(G, k, 'boost'); }
+        if (k.charge >= MT_BIG) { k.boostT = Math.max(k.boostT, 1.0); addGauge(k, 12 * cm, G); sfx(G, k, 'boost'); }
+        else if (k.charge >= MT_SMALL) { k.boostT = Math.max(k.boostT, 0.5); addGauge(k, 6 * cm, G); sfx(G, k, 'boost'); }
       }
-      k.drift = false; k.driftDir = 0; k.charge = 0;
+      if (spinning || k.charge < MT_SMALL) k.combo = 0;   // a fizzled drift breaks the chain
+      k.drift = false; k.driftDir = 0; k.charge = 0; k._sinceDrift = 0;
     }
 
     // ---- speed cap ----
@@ -381,24 +514,32 @@ window.PK = window.PK || {};
 
     // ---- steering ----
     const av = Math.abs(k.v);
-    const speedF = clamp(av / 45, 0, 1) * (1 - 0.22 * clamp(av / d.maxV, 0, 1.4));
+    // speed-sensitive: a little less steering at top speed (still enough for every corner)
+    const speedF = clamp(av / 45, 0, 1) * (1 - 0.25 * clamp(av / d.maxV, 0, 1.4));
     const dirS = k.v >= 0 ? 1 : -1;
+    // drift entry eases in over ~0.2 s instead of snapping sideways
+    k._driftIn = k.drift ? Math.min(1, (k._driftIn || 0) + dt * 5) : 0;
     if (k.drift) {
       // drifting: base rotation into the drift, steering tightens (into) or widens (counter)
-      const rate = (k.driftDir * 0.72 + steer * 0.5) * d.turn * Math.max(speedF, 0.6);
+      const rate = (k.driftDir * 0.72 * k._driftIn + steer * 0.5) * d.turn * Math.max(speedF, 0.6);
       k.a += rate * dt;
       const into = steer * k.driftDir > 0.3;
       k.charge += dt * (into ? 1.25 : 0.8);
-      addGauge(k, dt * (into ? 19 : 11), G);
+      addGauge(k, dt * (into ? 19 : 11) * (1 + COMBO_STEP * Math.max(0, k.combo - 1)), G);
       k.v *= 1 - 0.06 * dt;
     } else if (!spinning) {
       k.a += steer * d.turn * speedF * dirS * dt;
+      // self-align: with the wheel centred, the nose settles onto the travel direction
+      if (centred && k.v > 20) k.a += angDiff(k.a, k.ma) * Math.min(1, 2.5 * dt);
     }
     k.a = wrapAng(k.a);
 
     // ---- grip: movement angle follows heading ----
     let grip = d.grip;
-    if (k.drift) grip *= 0.24;
+    if (T && T.gripAt) grip *= T.gripAt(k.x, k.y);   // per-map grip (icy floor / ice patches)
+    // drift: low grip; on exit grip recovers over ~0.3 s so the slide straightens out smoothly
+    k._gripR = k.drift ? 0.24 : Math.min(1, (k._gripR == null ? 1 : k._gripR) + dt * 2.5);
+    grip *= k._gripR;
     if (inPuddle) grip *= 0.12 + w * 0.05;    // light karts slide more in milk
     if (spinning) grip *= 0.5;
     const diff = angDiff(k.ma, k.a);
@@ -415,6 +556,8 @@ window.PK = window.PK || {};
     // clean driving at top speed fills a little gauge
     if (!k.drift && !k.offroad && k.v > d.maxV * 0.9 && k.boostT <= 0) addGauge(k, 3 * dt, G);
 
+    slipstream(k, dt, G);
+
     // ---- integrate position ----
     k.x += Math.cos(k.ma) * k.v * dt;
     k.y += Math.sin(k.ma) * k.v * dt;
@@ -429,6 +572,34 @@ window.PK = window.PK || {};
     k.prev.drift = driftBtn || !!inp.drift;
     k.prev.boost = boostBtn;
     k.prev.skill = skillBtn;
+  }
+
+  // slipstream: charge while tucked behind a kart heading the same way; pulling out with a full
+  // charge gives a short speed buff. G.onSlip(k) (main.js) toasts it for the player.
+  function slipstream(k, dt, G) {
+    const ks = G && G.karts;
+    if (!ks || k.v < 60 || k.fx.spin > 0 || (G.state && G.state !== 'race' && !G.attract)) { if (k.slipT < SLIP_CHARGE) k.slipT = 0; return; }
+    const c = Math.cos(k.ma), s = Math.sin(k.ma);
+    let tucked = false;
+    for (let i = 0; i < ks.length; i++) {
+      const o = ks[i];
+      if (o === k || o.fx.phase > 0) continue;
+      const dx = o.x - k.x, dy = o.y - k.y, f = dx * c + dy * s;
+      if (f < SLIP_MIN || f > SLIP_MAX || Math.abs(-dx * s + dy * c) > SLIP_SIDE) continue;
+      if (Math.abs(angDiff(k.ma, o.ma)) < 0.4) { tucked = true; break; }
+    }
+    if (tucked) {
+      const was = k.slipT;
+      k.slipT += dt;
+      if (was < SLIP_CHARGE && k.slipT >= SLIP_CHARGE && k.isPlayer && G.onSlip) G.onSlip(k, false);
+    } else if (k.slipT >= SLIP_CHARGE) {   // pulled out: release
+      const fx = k.fx;
+      fx.buffMul = fx.buff > 0 ? Math.max(fx.buffMul || 1, SLIP_MUL) : SLIP_MUL;
+      fx.buff = Math.max(fx.buff || 0, SLIP_BUFF);
+      k.slipT = 0; k._slipGo = SLIP_BUFF;
+      if (k.isPlayer && G.onSlip) G.onSlip(k, true);
+    } else k.slipT = 0;
+    if (k._slipGo > 0) k._slipGo -= dt;
   }
 
   function wrapAng(a) {
@@ -497,12 +668,14 @@ window.PK = window.PK || {};
   // ---------------------------------------------------------------------------
   function collide(karts) {
     const R2 = KART_R * 2;
+    const T = PK.Track;
+    if (T && T.tickObstacles) T.tickObstacles(1 / 60);   // moving obstacles advance once per fixed step
     for (let i = 0; i < karts.length; i++) {
       const A = karts[i];
-      if (A.fx.ghost > 0) continue;
+      if (A.fx.ghost > 0 || A.fx.phase > 0) continue;
       for (let j = i + 1; j < karts.length; j++) {
         const B = karts[j];
-        if (B.fx.ghost > 0) continue;
+        if (B.fx.ghost > 0 || B.fx.phase > 0) continue;
         let dx = B.x - A.x, dy = B.y - A.y;
         const dsq = dx * dx + dy * dy;
         if (dsq >= R2 * R2) continue;
@@ -532,6 +705,70 @@ window.PK = window.PK || {};
         B.x += dx * shove * (mA / M) * 0.1; B.y += dy * shove * (mA / M) * 0.1;
       }
     }
+    if (T && T.obstacles && T.obstacles.length) collideObstacles(karts, T.obstacles);
+  }
+  // track obstacles (PK.Track.obstacles: immovable circles, some sliding sideways): push the kart
+  // out, reflect the inward part of its velocity (small bounce), and on a fresh hit scrub the
+  // speed (keeps 62% of the sliding part), cancel the drift and the combo. Phased karts pass through.
+  const OBS_BOUNCE = 0.22, OBS_KEEP = 0.62, OBS_CD = 0.4;
+  function collideObstacles(karts, obs) {
+    for (let i = 0; i < karts.length; i++) {
+      const k = karts[i];
+      if (k.fx.phase > 0 || k.fx.ghost > 0) continue;
+      for (let j = 0; j < obs.length; j++) {
+        const o = obs[j], rr = o.r + KART_R;
+        let nx = k.x - o.x, ny = k.y - o.y;
+        const dsq = nx * nx + ny * ny;
+        if (dsq >= rr * rr) continue;
+        const d = Math.sqrt(dsq);
+        if (d < 1e-4) { nx = -Math.cos(k.ma); ny = -Math.sin(k.ma); } else { nx /= d; ny /= d; }
+        k.x = o.x + nx * rr; k.y = o.y + ny * rr;
+        const ovx = o.vx || 0, ovy = o.vy || 0;
+        const vx = Math.cos(k.ma) * k.v - ovx, vy = Math.sin(k.ma) * k.v - ovy;
+        const vn = vx * nx + vy * ny;
+        if (vn >= 0) continue;
+        const hard = !(k._obsT > 0), keep = hard ? OBS_KEEP : 0.92;
+        const tx = vx - vn * nx, ty = vy - vn * ny;
+        setVel(k, tx * keep - nx * vn * OBS_BOUNCE + ovx, ty * keep - ny * vn * OBS_BOUNCE + ovy);
+        if (hard && -vn > 12) {
+          k._obsT = OBS_CD; k.obsHits = (k.obsHits || 0) + 1; k.combo = 0;
+          if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
+          const G = PK.Game;
+          if (k.isPlayer && G && G.sfx) G.sfx('bump');
+        }
+      }
+    }
+  }
+  // AI: the nearest obstacle ahead whose (swept) band overlaps the planned lane -> a lane beside it
+  // (the side with more room, kept until it is passed) and its index to aim past.
+  function avoidObstacle(k, T, lane, ahead) {
+    const obs = T.obstacles, ai = k.ai;
+    if (!obs || !obs.length || k.fx.phase > 0) { ai.avoidO = null; return null; }
+    const N = T.N;
+    let best = null, bm = 1e9;
+    for (let n = 0; n < obs.length; n++) {
+      const o = obs[n];
+      let m = ((o.i - k.idx) % N + N) % N;
+      if (m > N / 2) m -= N;
+      if (m < -1 || m > ahead) continue;
+      const pad = o.r + KART_R + 4.5, lo = o.lo - pad, hi = o.hi + pad;
+      const a = Math.min(lane, k.lat), b = Math.max(lane, k.lat);
+      if (ai.avoidO !== o && (b < lo || a > hi)) continue;
+      if (m < bm) { bm = m; best = { o, lo, hi, m }; }
+    }
+    if (!best) { ai.avoidO = null; return null; }
+    const o = best.o, half = T.ROAD_W / 2;
+    if (ai.avoidO !== o) {
+      // pass on the side the kart is already on if that gap is wide enough, else the wider gap
+      // (a kart already out on the shoulder beyond it may pass on the shoulder, up to the wall)
+      const mid = (o.lo + o.hi) / 2, cur = k.lat > mid ? 1 : -1, need = 2;
+      const wl = cur < 0 ? T.BARRIER - 6 : half - 2, wr = cur > 0 ? T.BARRIER - 6 : half - 2;
+      const roomL = best.lo + wl, roomR = wr - best.hi;
+      ai.avoidO = o; ai.avoidS = (cur > 0 ? roomR : roomL) >= need ? cur : (roomR > roomL ? 1 : -1);
+    }
+    const lim = (ai.avoidS > 0) === (k.lat > (o.lo + o.hi) / 2) ? T.BARRIER - 6 : half - 3;
+    const nl = clamp(ai.avoidS > 0 ? best.hi + 1 : best.lo - 1, -lim, lim);
+    return { lane: nl, i: o.i, m: best.m };
   }
   function setVel(k, vx, vy) {
     const sp = Math.hypot(vx, vy);
@@ -547,7 +784,9 @@ window.PK = window.PK || {};
   // ---------------------------------------------------------------------------
   function hit(k, type, dur) {
     const fx = k.fx;
+    if (fx.phase > 0) return false;   // phased ghost: immune
     if (fx.shield > 0) { fx.shield = 0; return false; }
+    k.combo = 0; k.slipT = 0;
     if (type === 'spin') {
       fx.spin = Math.max(fx.spin, dur || 1.2);
       k.v *= 0.35;
@@ -590,22 +829,26 @@ window.PK = window.PK || {};
       if (P && P !== k && G.state !== 'title') {
         const gap = (P.prog - k.prog) / N;   // laps; >0 = AI behind player
         target = 1 + clamp(gap * 0.25, -0.07, 0.07);
+        if (G.hard) target = Math.max(target, 1.03);   // glitch map: the field never eases off
       }
       ai.rubber += (target - ai.rubber) * Math.min(1, dt * 0.8);
     } else ai.rubber = 1;
 
     // ---- racing line target ----
     const look = Math.round(3 + Math.max(0, k.v) * 0.065);
-    const j = wrapI(k.idx + look, N);
-    const tj = T.TAN[j], pj = T.PTS[j];
+    let j = wrapI(k.idx + look, N);
     const halfRoad = T.ROAD_W / 2 - 5;
     // drifting wide toward the edge -> aim back to the centre of the road
     const edge = Math.abs(k.lat) > halfRoad - 3;
-    const lane = edge ? 0 : clamp(ai.lane + Math.sin(ai.t * 0.55 + ai.phase) * 3, -halfRoad, halfRoad);
+    let lane = edge ? 0 : clamp(ai.lane + Math.sin(ai.t * 0.55 + ai.phase) * 3, -halfRoad, halfRoad);
+    // obstacle ahead in the way -> steer for a gap beside it
+    const av = avoidObstacle(k, T, lane, look + 24);
+    if (av) { lane = av.lane; j = av.m > 3 ? wrapI(k.idx + clamp(av.m, 4, Math.round(look * 0.7)), N) : wrapI(av.i + 4, N); }   // short look-ahead: converge onto the gap
+    const tj = T.TAN[j], pj = T.PTS[j];
     const tx = pj[0] - Math.sin(tj) * lane, ty = pj[1] + Math.cos(tj) * lane;
     const want = Math.atan2(ty - k.y, tx - k.x);
     let err = angDiff(k.a, want);
-    out.steer = clamp(err * 2.4, -1, 1);
+    out.steer = clamp(err * (av ? 3.2 : 2.4) + (av ? clamp((lane - k.lat) * 0.08, -0.6, 0.6) : 0), -1, 1);   // + lateral pull while threading
 
     // ---- curvature ahead -> target speed ----
     const span = Math.round(10 + Math.max(0, k.v) * 0.12);
@@ -624,6 +867,7 @@ window.PK = window.PK || {};
     let vt = kMax > 1e-4 ? Math.min(cap, turnEff / kMax) : cap;
     if (k.drift) vt = Math.max(vt, cap * 0.85);   // drifting turns tighter
     if (edge && !k.drift) vt *= 0.88;
+    if (av && av.m < look + 10 && Math.abs(k.lat - lane) > 5) vt = Math.min(vt, cap * 0.72);   // not lined up yet: ease off
     vt = Math.max(vt, 55);
     if (k.v > vt + 14) { out.gas = false; out.brake = true; }
     else if (k.v > vt + 4) { out.gas = false; }
@@ -636,6 +880,7 @@ window.PK = window.PK || {};
         ai.driftCd = 1.2;
         ai.driftSide = sumAng > 0 ? 1 : -1;
       }
+      if (av && av.m < look + 6) ai.wantDrift = false;   // threading past an obstacle: no drift
       if (ai.wantDrift && Math.abs(sumAng) > 0.6) {
         out.drift = true;
         out.steer = ai.driftSide;
@@ -675,8 +920,11 @@ window.PK = window.PK || {};
   // ---------------------------------------------------------------------------
   // frame
   // ---------------------------------------------------------------------------
+  // phased karts (fx.phase > 0) get the pre-faded frames, blinking in the last 0.6 s
   function frame(k, camA) {
-    const s = (k.isPlayer ? SPR_ME : SPR)[k.defIndex];
+    let s = (k.isPlayer ? SPR_ME : SPR)[k.defIndex];
+    const ph = k.fx && k.fx.phase;
+    if (ph > 0 && SPR_PHASE[k.defIndex] && (ph > 0.6 || ((ph * 10) | 0) % 2 === 0)) s = SPR_PHASE[k.defIndex];
     if (!s) return null;
     if (k.fx.spin > 0) {
       const f = Math.floor(k.spinA / (Math.PI / 2)) & 3;
@@ -684,13 +932,19 @@ window.PK = window.PK || {};
     }
     let lean = 0;
     if (k.isPlayer) {
+      // hysteresis: lean in past 0.35, come back below 0.15 (no flicker between frames)
+      const l0 = k._lean || 0, si = k.steerIn;
       if (k.drift) lean = k.driftDir;
-      else if (k.steerIn > 0.3) lean = 1; else if (k.steerIn < -0.3) lean = -1;
+      else if (l0 !== 0 && si * l0 > 0.15) lean = l0;
+      else if (si > 0.35) lean = 1; else if (si < -0.35) lean = -1;
+      k._lean = lean;
     } else {
       const rel = angDiff(camA === undefined ? k.a : camA, k.a);
       if (k.drift) lean = k.driftDir;
       else if (rel > 0.22) lean = 1; else if (rel < -0.22) lean = -1;
     }
+    // glitch driver: the frame jumps now and then
+    if (k.def.ch === 'glitch' && Math.random() < 0.05) return s[(Math.random() * 3) | 0];
     return s[lean + 1];
   }
 
@@ -752,6 +1006,22 @@ window.PK = window.PK || {};
       g.fillStyle = '#ffffff';
       g.fillRect(Math.round(cx - rr * 0.45), Math.round(cy - rr * 0.5), s * 2, s);
     }
+    // slipstream: wind streaks along the sides (charged = white, released buff = cyan)
+    if (k.slipT >= SLIP_CHARGE || k._slipGo > 0) {
+      g.fillStyle = k._slipGo > 0 ? 'rgba(160,240,255,0.8)' : 'rgba(255,255,255,0.7)';
+      for (let i = 0; i < 2; i++) {
+        const yy = by - w * (0.3 + R() * 0.8), len = Math.max(2, Math.round(w * (0.25 + R() * 0.3)));
+        g.fillRect(Math.round(sx - w * 0.62 - R() * 2), Math.round(yy), s, len);
+        g.fillRect(Math.round(sx + w * 0.62 + R() * 2), Math.round(yy), s, len);
+      }
+    }
+    // glitch kart: stray noise pixels / a torn bar beside the driver
+    if (k.def.ch === 'glitch' && R() < 0.35) {
+      const gy = by - w * SH / SW * (0.4 + R() * 0.6);
+      const gc = R() < 0.4 ? '#ff30c0' : R() < 0.7 ? '#30e8ff' : '#60ffb0';
+      if (R() < 0.3) px(sx - w * 0.5 + R() * w * 0.3, gy, gc, Math.max(1, Math.round(w * (0.2 + R() * 0.4))));
+      else for (let i = 0; i < 3; i++) px(sx + (R() - 0.5) * w * 1.1, gy + (R() - 0.5) * w * 0.3, gc);
+    }
     // spin stars over the driver
     if (k.fx.spin > 0) {
       const cy = by - w * SH / SW * 1.02;
@@ -764,5 +1034,5 @@ window.PK = window.PK || {};
     }
   }
 
-  PK.Karts = { DEFS, init, create, update, collide, aiInput, hit, drawFx, frame, sprite, emptySprite };
+  PK.Karts = { DEFS, ROSTER, init, create, update, collide, aiInput, hit, drawFx, frame, sprite, emptySprite };
 })(window.PK);

@@ -6,12 +6,12 @@ window.PK = window.PK || {};
     W: 320, H: 180, CX: 160,
     HORIZON: 60,      // screen row of the horizon; rows < HORIZON are background
     FOCAL: 160,       // projection focal length in screen px (90deg FOV)
-    CAM_H: 15,        // camera height (world units)
-    CAM_DIST: 27,     // camera distance behind player
+    CAM_H: 24,        // camera height (world units) — high enough to see the track ahead, less dizzying
+    CAM_DIST: 36,     // camera distance behind player
     LAPS: 3,
     TEX: 1024,        // track texture size (world units == texels)
     TAU: Math.PI * 2,
-    FOG_NEAR: 220, FOG_FAR: 720
+    FOG_NEAR: 300, FOG_FAR: 860
   };
   C.PER = Math.round(C.TAU * C.FOCAL); // background columns for a full 360deg
 

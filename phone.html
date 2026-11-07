@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>픽셀 카트 · 모바일 시뮬레이터</title>
+<style>
+  :root { --bg: #0d0a14; --panel: #2a1f3d; --ink: #fff; --sub: #c8bce0; --acc: #ffcc00; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: center; padding: 10px 16px;
+    background: var(--panel); border-bottom: 3px solid #000; }
+  header h1 { margin: 0; font-size: 18px; color: var(--acc); white-space: nowrap; }
+  label { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 6px; }
+  select, button { font: inherit; font-size: 13px; padding: 5px 10px; border: 2px solid #000; border-radius: 6px; cursor: pointer; }
+  select { background: #fff; color: #1a0d00; }
+  button { background: var(--acc); color: #1a0d00; font-weight: 700; }
+  button.alt { background: #6d5a8c; color: #fff; }
+  main { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 16px; }
+  #stage { position: relative; }
+  /* the phone body; the screen inside is the real device size in CSS px, scaled to fit */
+  #phone { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: #111; border-radius: 34px; padding: 14px;
+    box-shadow: 0 0 0 3px #333, 0 20px 50px rgba(0, 0, 0, .6); }
+  #phone::before { content: ''; position: absolute; background: #222; border-radius: 6px; }
+  #phone.land::before { left: 5px; top: 50%; width: 5px; height: 60px; transform: translateY(-50%); }
+  #phone.port::before { top: 5px; left: 50%; width: 60px; height: 5px; transform: translateX(-50%); }
+  iframe { display: block; border: 0; border-radius: 20px; background: #000; }
+  footer { text-align: center; font-size: 12px; color: var(--sub); padding: 8px 16px 12px; }
+  footer b { color: var(--acc); }
+</style>
+</head>
+<body>
+<header>
+  <h1>📱 모바일 시뮬레이터</h1>
+  <label>기기
+    <select id="dev">
+      <option value="667x375">아이폰 SE (667×375)</option>
+      <option value="844x390" selected>아이폰 14 (844×390)</option>
+      <option value="932x430">아이폰 14 Pro Max (932×430)</option>
+      <option value="780x360">갤럭시 S23 (780×360)</option>
+      <option value="915x412">갤럭시 S23 울트라 (915×412)</option>
+      <option value="1024x768">아이패드 (1024×768)</option>
+    </select>
+  </label>
+  <label>버튼 크기
+    <select id="size">
+      <option value="s">작게</option>
+      <option value="m" selected>보통</option>
+      <option value="l">크게</option>
+    </select>
+  </label>
+  <button id="cfg" class="alt">⚙ 버튼 설정</button>
+  <button id="rot" class="alt">↻ 가로/세로</button>
+  <button id="reload">⟳ 다시 시작</button>
+</header>
+<main><div id="stage"><div id="phone" class="land"><iframe id="game" title="픽셀 카트" allow="autoplay"></iframe></div></div></main>
+<footer>마우스로 <b>조이스틱</b>을 드래그하고 <b>버튼</b>을 클릭해 보세요 · 실제 휴대폰은 같은 와이파이에서 이 PC 주소로 접속하면 돼요</footer>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const frame = $('game'), phone = $('phone'), stage = $('stage'), main = document.querySelector('main');
+  const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
+  let portrait = false;
+
+  $('dev').value = lsGet('pk_sim_dev') || $('dev').value;
+  $('size').value = lsGet('pk_btn_size') || 'm';
+  $('cfg').addEventListener('click', () => {
+    const pk = frame.contentWindow && frame.contentWindow.PK;
+    if (pk && pk.Joystick && pk.Joystick.openSettings) pk.Joystick.openSettings();
+  });
+
+  function layout() {
+    const [a, b] = $('dev').value.split('x').map(Number);
+    const w = portrait ? b : a, h = portrait ? a : b, pad = 14;
+    frame.style.width = w + 'px'; frame.style.height = h + 'px';
+    phone.className = portrait ? 'port' : 'land';
+    const pw = w + pad * 2, ph = h + pad * 2;
+    const s = Math.min(1, (main.clientWidth - 32) / pw, (main.clientHeight - 32) / ph);
+    phone.style.transform = 'scale(' + s + ')';
+    stage.style.width = pw * s + 'px'; stage.style.height = ph * s + 'px';
+  }
+  function load() { frame.src = 'index.html?mobile=1&t=' + Date.now(); }
+
+  $('dev').addEventListener('change', () => { lsSet('pk_sim_dev', $('dev').value); layout(); load(); });
+  $('size').addEventListener('change', () => {
+    lsSet('pk_btn_size', $('size').value);
+    try { localStorage.removeItem('pk_btn_cfg'); } catch (e) { /* ignore */ }
+    const pk = frame.contentWindow && frame.contentWindow.PK;
+    if (pk && pk.Joystick && pk.Joystick.setSize) pk.Joystick.setSize($('size').value); else load();
+  });
+  $('rot').addEventListener('click', () => { portrait = !portrait; layout(); });
+  $('reload').addEventListener('click', load);
+  window.addEventListener('resize', layout);
+  layout(); load();
+})();
+</script>
+</body>
+</html>
