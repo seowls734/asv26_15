@@ -37,6 +37,7 @@ window.PK = window.PK || {};
     // tests / console: advance the game by n fixed steps without waiting for frames
     debugStep(n) { for (let i = 0; i < (n | 0); i++) step(1 / 60); },
     debugShot() { render(); return canvas.toDataURL('image/png'); },
+    debugCam() { return camA; },
   };
 
   // ---------------------------------------------------------------------------
@@ -2057,7 +2058,11 @@ window.PK = window.PK || {};
     // gentle follow rate and a yaw-rate cap so drifts and bumps don't swing the view
     const p = G.player;
     if (p) {
-      const tgt = typeof p.ma === 'number' ? p.ma : p.a;
+      // follow the movement direction, but the facing while sliding sideways / nearly stopped
+      // (a wall hit or a spin can swing the movement angle a lot in one frame: no camera whip)
+      const slide = typeof p.ma === 'number' ? Math.abs(U.angDiff(p.a, p.ma)) : 0;
+      const steady = p.drift || (p.fx && p.fx.spin > 0);   // drifts / spin-outs keep following the movement
+      const tgt = typeof p.ma !== 'number' || (!steady && (slide > 0.7 || Math.abs(p.v || 0) < 15)) ? p.a : p.ma;
       let da = U.angDiff(camA, tgt);
       const dz = 0.03;
       da = Math.abs(da) < dz ? 0 : da - Math.sign(da) * dz;

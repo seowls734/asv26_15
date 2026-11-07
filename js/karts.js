@@ -1136,15 +1136,18 @@ window.PK = window.PK || {};
       // a hard hit bounces the kart back off the wall a little
       const lat = s * (T.BARRIER - (hard ? 2.6 : 0.5));
       k.x = p[0] - Math.sin(t) * lat; k.y = p[1] + Math.cos(t) * lat; k.lat = lat;
-      // deflect movement along the wall (keep the tangential part, point slightly inward)
-      const along = Math.abs(angDiff(t, k.ma)) <= Math.PI / 2 ? t : t + Math.PI;
-      const fwdSign = along === t ? 1 : -1;
+      // deflect movement along the wall (keep the tangential part, point slightly inward). Which way
+      // "along" is comes from where the kart FACES, leaning to the race direction (up to ~115°), so a
+      // straight-on hit never flips the kart round (the old pick used the movement angle and could
+      // send it backwards / spin the camera)
+      const fwd = Math.abs(angDiff(t, k.a)) <= 2.0;
+      const along = fwd ? t : t + Math.PI, fwdSign = fwd ? 1 : -1;
       const outward = Math.sin(angDiff(along, k.ma)) * s * fwdSign > 0;
-      if (outward) k.ma = wrapAng(along - s * fwdSign * 0.12);
+      if (outward || Math.abs(angDiff(along, k.ma)) > Math.PI / 2) k.ma = wrapAng(along - s * fwdSign * 0.12);
       if (hard) {
         // 쿵! big speed loss, a dust puff and (player) a thud + small shake
         k.v *= 0.4; k._bumpT = 0.45; k._wallT = 0.35; k._wallSide = s;
-        k.ma = wrapAng(k.ma - s * 0.25 * (Math.abs(angDiff(t, k.ma)) <= Math.PI / 2 ? 1 : -1));   // kicked back inward
+        k.ma = wrapAng(along - s * fwdSign * 0.3);   // kicked back inward a little
         sfx(G, k, 'wall');
         if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
         k.combo = 0;
@@ -1153,8 +1156,8 @@ window.PK = window.PK || {};
         if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
       } else k.v *= 1 - 1.2 * dt;
       if (Math.abs(k.v) > 18) { k._sparkT = Math.max(k._sparkT || 0, hard ? 0.3 : 0.16); k._sparkSide = s; k._sparkBig = hard ? 1 : 0; }
-      // nudge heading back toward track direction
-      k.a = wrapAng(k.a + angDiff(k.a, Math.abs(angDiff(t, k.a)) > Math.PI / 2 ? t + Math.PI : t) * Math.min(1, 3 * dt) * 0.5);
+      // nudge heading back toward the same 'along' direction
+      k.a = wrapAng(k.a + angDiff(k.a, along) * Math.min(1, 3 * dt) * 0.5);
     }
 
     // laps
