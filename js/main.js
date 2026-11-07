@@ -1135,19 +1135,14 @@ window.PK = window.PK || {};
     if (el.rankNick && PK.Rank) el.rankNick.value = PK.Rank.nick();
     buildRank();
   }
+  // one combined board: every map's records in a single table (map name on each row), fastest first
   async function buildRank() {
     const tabs = el.rankTabs, list = el.rankList;
-    if (tabs) {
-      tabs.innerHTML = '';
-      MAPS().forEach((m, i) => {
-        const b = mk('button', 'btn ' + (i === rankMap ? '' : 'alt'), (m.secret ? '★ ' : '') + m.nameKo);
-        b.addEventListener('click', () => { uiBeep(0); rankMap = i; buildRank(); });
-        tabs.appendChild(b);
-      });
-    }
+    if (tabs) tabs.innerHTML = '';
     if (!list || !PK.Rank) return;
     list.innerHTML = '<div class="rmsg">불러오는 중…</div>';
-    const req = ++rankReq, res = await PK.Rank.top(rankMap);
+    const ms = MAPS(), req = ++rankReq;
+    const res = PK.Rank.topAll ? await PK.Rank.topAll(ms.map((m) => m.id)) : await PK.Rank.top(rankMap);
     if (req !== rankReq) return;   // a newer tab was picked meanwhile
     if (el.rankInfo) el.rankInfo.textContent = (res.online ? '🌏 전 세계 랭킹' : (PK.Rank.configured ? '⚠ 온라인 연결 실패 · 이 기기 기록' : '📱 이 기기 기록 (온라인 랭킹 설정 전)')) + ' · 내 이름 ' + PK.Rank.nick();
     list.innerHTML = '';
@@ -1156,6 +1151,8 @@ window.PK = window.PK || {};
       const r = mk('div', 'rrow' + (e.me ? ' me' : '') + (i < 3 ? ' top' + (i + 1) : ''));
       r.appendChild(mk('b', null, ['🥇', '🥈', '🥉'][i] || (i + 1) + '.'));
       r.appendChild(mk('span', 'rname', e.name));
+      const m = ms.find((x) => x.id === e.map);
+      r.appendChild(mk('span', 'rmap', m ? (m.secret ? '★ ' : '') + m.nameKo : ''));
       r.appendChild(mk('span', 'rkart', (PK.Karts.DEFS[e.kart] || {}).nameKo || ''));
       r.appendChild(mk('span', 'rtime', fmt(e.time)));
       list.appendChild(r);
@@ -1696,7 +1693,6 @@ window.PK = window.PK || {};
       else if (c === 'KeyN') { uiBeep(0); goModes(); }
     } else if (st === 'rank') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
-      else if (c === 'ArrowLeft' || c === 'ArrowRight') { const n = MAPS().length; rankMap = (rankMap + (c === 'ArrowRight' ? 1 : n - 1)) % n; uiBeep(0); buildRank(); }
     } else if (st === 'modes' || st === 'settings') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
       else if (st === 'modes' && c === 'KeyL') { uiBeep(0); ghostMode = false; goMaps(); }

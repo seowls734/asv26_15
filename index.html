@@ -200,11 +200,12 @@
   #btnShop, #btnDex, #btnAch, #btnRank, #btnSettings { font-size: .95em; min-height: 2.5em; white-space: nowrap; }
   /* ---------- 랭킹 ---------- */
   #rankTabs .btn { font-size: .7em; padding: .2em .6em; margin: .12em; }
-  #rankList { width: 100%; max-width: 30em; margin: .3em 0; }
-  .rrow { display: grid; grid-template-columns: 2.2em 1fr 4.5em 5em; gap: .4em; align-items: center; padding: .25em .5em; margin: .12em 0;
+  #rankList { width: 100%; max-width: 36em; margin: .3em 0; max-height: 58vh; overflow-y: auto; }
+  .rrow { display: grid; grid-template-columns: 2.2em 1fr 7em 4.5em 5em; gap: .4em; align-items: center; padding: .25em .5em; margin: .12em 0;
     background: #2a1f3d; border: .12em solid #000; font-size: .8em; color: #e8e0f8; }
   .rrow b { color: #ffcc00; text-align: center; }
   .rrow .rkart { color: #a898c8; font-size: .85em; }
+  .rrow .rmap { color: #9fe8ff; font-size: .8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rrow .rtime { color: #fff; text-align: right; font-variant-numeric: tabular-nums; }
   .rrow.top1 { background: #4a3a12; } .rrow.top2 { background: #3a3a46; } .rrow.top3 { background: #43301e; }
   .rrow.me { outline: .15em solid #7dff9a; }
@@ -383,7 +384,7 @@
       <button id="btnNick" class="btn alt">이름 저장</button>
       <button id="btnRankBack" class="btn alt">← 뒤로</button>
     </div>
-    <div class="hint">맵마다 가장 빠른 기록 TOP 10 · 완주하면 기록이 자동으로 올라가요 · ← → 맵 바꾸기 · Esc 뒤로</div>
+    <div class="hint">모든 맵의 기록을 한 표에 · 빠른 순서 · 완주하면 기록이 자동으로 올라가요 · Esc 뒤로</div>
   </div>
 
   <!-- 업적 / 칭호 (filled by main.js buildAch) -->

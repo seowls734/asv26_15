@@ -57,5 +57,14 @@ window.PK = window.PK || {};
     return { online: false, list: mark((local()['m' + (mapId | 0)] || []).slice(0, TOP)) };
   }
 
-  PK.Rank = { get configured() { return !!db(); }, nick, setNick, submit, top };
+  // every map's board merged into one list: -> { online, list: [{ ...entry, map }] } sorted by time
+  async function topAll(mapIds) {
+    const res = await Promise.all(mapIds.map((id) => top(id).then((r) => ({ id, r }))));
+    const list = [];
+    res.forEach(({ id, r }) => r.list.forEach((e) => list.push(Object.assign({ map: id }, e))));
+    list.sort((a, b) => a.time - b.time);
+    return { online: res.some((x) => x.r.online), list };
+  }
+
+  PK.Rank = { get configured() { return !!db(); }, nick, setNick, submit, top, topAll };
 })(window.PK);
