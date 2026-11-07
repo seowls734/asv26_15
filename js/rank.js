@@ -63,7 +63,10 @@ window.PK = window.PK || {};
     const list = [];
     res.forEach(({ id, r }) => r.list.forEach((e) => list.push(Object.assign({ map: id }, e))));
     list.sort((a, b) => a.time - b.time);
-    return { online: res.some((x) => x.r.online), list };
+    // 10 people at most: each name once, with its fastest record
+    const seen = new Set(), out = [];
+    for (const e of list) { if (seen.has(e.name)) continue; seen.add(e.name); out.push(e); if (out.length >= TOP) break; }
+    return { online: res.some((x) => x.r.online), list: out };
   }
 
   PK.Rank = { get configured() { return !!db(); }, nick, setNick, submit, top, topAll };
