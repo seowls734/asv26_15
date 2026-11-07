@@ -25,8 +25,23 @@ window.PK = window.PK || {};
 
   // sprites (built in init)
   const SPR = { peel: null, melon: [null, null], foam: [], cart: null, magnet: null, coin: null, wrap: null,
-                bat: [null, null], drop: null, wisp: null, gpx: [] };
+                bat: [null, null], drop: null, wisp: null, gpx: [], box: [], boxSh: null, mis: [null, null], trail: [] };
   const glitches = [];  // {x, y, t} teleport pixel bursts
+  // ❓ item boxes (rows across the road) + 장바구니 미사일 (homing basket from the box pool)
+  const boxes = [];     // {x, y, t (respawn left), age, ph}
+  const missiles = [];  // {fi, lat, x, y, h, t, owner, speed, target}
+  const BOX_R = 6, BOX_RESPAWN = 3, BOX_ROLL = 0.8;
+  const MIS_LIFE = 6, MIS_R = 5, MIS_V = 250, MIS_ACC = 60, MIS_STUN = 1.3, MAX_MIS = 6;
+  const BOX_IDS = ['banana', 'turbo', 'shield', 'magnet', 'cloak', 'missile'];
+  const BOX = {
+    banana: { nameKo: '바나나', en: 'BANANA!', icon: null },
+    turbo: { nameKo: '터보', en: 'TURBO!', icon: null },
+    shield: { nameKo: '방패', en: 'SHIELD!', icon: null },
+    magnet: { nameKo: '음식 자석', en: 'FOOD MAGNET!', icon: null },
+    cloak: { nameKo: '유령 망토', en: 'CLOAK!', icon: null },
+    missile: { nameKo: '장바구니 미사일', en: 'BASKET MISSILE!', icon: null }
+  };
+  const BOX_MAG_T = 5, BOX_SHIELD_T = 6;
   const TELE_FX = 0.7;
 
   // sprite pool for sprites()
@@ -58,7 +73,8 @@ window.PK = window.PK || {};
     let s = kst.get(k);
     if (!s) {
       s = { rushT: 0, rushHit: new Set(), magT: 0, magTarget: null, coinT: 0, coinX: 0, coinY: 0,
-            wrapT: 0, soapCd: 0, drainT: 0, drainFrom: null, readySince: -1, aiDelay: 0.5, eager: 0.6 + rnd() * 0.4 };
+            wrapT: 0, soapCd: 0, drainT: 0, drainFrom: null, readySince: -1, aiDelay: 0.5, eager: 0.6 + rnd() * 0.4,
+            boxSince: -1, boxDelay: 0.8 };
       kst.set(k, s);
     }
     return s;
@@ -335,16 +351,18 @@ window.PK = window.PK || {};
     SPR.drop = U.makeSprite(['.r.', 'rRr', '.r.'], { r: '#e01830', R: '#ff7080' });
     SPR.wisp = bubbleSprite(4, { o: '#b8c8f0', p: '#eef4ff', w: '#ffffff' });
     SPR.gpx = ['#ff30c0', '#30e8ff', '#60ffb0', '#ffffff'].map((c) => U.makeSprite(['xx', 'xx'], { x: c }));
+    boxSprites();
     itemIcons();
     reset();
   }
 
   function reset() {
-    peels.length = 0; melons.length = 0; foams.length = 0; swarms.length = 0; glitches.length = 0;
+    peels.length = 0; melons.length = 0; foams.length = 0; swarms.length = 0; glitches.length = 0; missiles.length = 0;
     kst = new Map();
     clock = 0;
     magKart = null; magT = 0; saleT = 0;
     placeFoods();
+    boxes.length = 0;   // 랜덤 박스 꺼짐 (placeBoxes 안 부름)
   }
 
   // ---------------------------------------------------------------- food pickups on the road
@@ -393,9 +411,16 @@ window.PK = window.PK || {};
         const dx = magKart.x - f.x, dy = magKart.y - f.y, d = Math.hypot(dx, dy);
         if (d < FMAG_R && d > 0.01) { const st = Math.min(d, FMAG_V * dt) / d; f.x += dx * st; f.y += dy * st; }
       }
+      for (let j = 0; j < ks.length; j++) {   // item-box magnet (per kart)
+        const mk = ks[j];
+        if (!(mk._fmagT > 0) || mk === magKart) continue;
+        const dx = mk.x - f.x, dy = mk.y - f.y, d = Math.hypot(dx, dy);
+        if (d < FMAG_R && d > 0.01) { const st = Math.min(d, FMAG_V * dt) / d; f.x += dx * st; f.y += dy * st; }
+      }
       for (let j = 0; j < ks.length; j++) {
         const k = ks[j], dx = k.x - f.x, dy = k.y - f.y;
         if (dx * dx + dy * dy > FOOD_R * FOOD_R) continue;
+        if (G && typeof G.pfx === 'function') G.pfx('food', f.x, f.y, 1.5);
         f.t = FOOD_RESPAWN; f.x = f.hx; f.y = f.hy;
         addGauge(k, FOOD_GAUGE, G);
         if (k.isPlayer) {
@@ -435,6 +460,320 @@ window.PK = window.PK || {};
   const saleLeft = () => saleT;
   const foodIcon = (i) => foodSpr[i | 0] || null;
   const foodName = (i) => FOOD_KO[i | 0] || '';
+
+  // ---------------------------------------------------------------- ❓ item boxes
+  // A few rows of 4 floating boxes across the road, between the food rows, clear of the start
+  // straight, obstacles, boost pads and puddles. Driving through one gives a random race item
+  // (k.boxItem, after a BOX_ROLL s roulette k.boxRoll) used with C / the touch item button (player)
+  // or aiBox() (AI). A box respawns BOX_RESPAWN s after it is taken. Off in online races (G.online).
+  const BOX_ROWS = [0.14, 0.36, 0.58, 0.8];
+  function placeBoxes() {
+    boxes.length = 0;
+    const t = T();
+    if (!t || !t.PTS || !t.N) return;
+    const N = t.N, P = t.PTS, TA = t.TAN, half = (t.ROAD_W || 44) / 2;
+    const food = [];
+    for (let j = 0; j < 9; j++) { food.push(Math.floor(N * (j + 0.5) / 9)); food.push(Math.floor(N * (j + 1) / 9) % N); }
+    const idist = (a, b) => { const d = Math.abs(a - b) % N; return Math.min(d, N - d); };
+    const obs = t.obstacles || [], pads = t.pads || [], pud = t.puddles || [];
+    const LATS = [-0.6, -0.2, 0.2, 0.6];
+    const at = (i, lat) => [P[i][0] - Math.sin(TA[i]) * lat, P[i][1] + Math.cos(TA[i]) * lat];
+    const valid = (i) => {
+      if (i < N * 0.08 || i > N * 0.93) return false;
+      if (food.some((f) => idist(f, i) < 4)) return false;
+      if (obs.some((o) => idist(o.i, i) < 10)) return false;
+      const p = P[i];
+      if (pads.some((q) => Math.hypot(q.x - p[0], q.y - p[1]) < 22)) return false;
+      if (pud.some((q) => Math.hypot(q.x - p[0], q.y - p[1]) < (q.r || 10) + 10)) return false;
+      for (let l = 0; l < LATS.length; l++) {
+        const b = at(i, LATS[l] * half);
+        if (obs.some((o) => Math.hypot(o.x - b[0], o.y - b[1]) < o.r + 8)) return false;
+      }
+      return true;
+    };
+    let ph = 0;
+    for (let r = 0; r < BOX_ROWS.length; r++) {
+      const i0 = Math.round(N * BOX_ROWS[r]), reach = Math.max(4, Math.round(N * 0.035));
+      let i = -1;
+      for (let k = 0; k <= reach && i < 0; k++) {
+        for (const sg of [1, -1]) { const j = wrapI(i0 + sg * k, N); if (valid(j)) { i = j; break; } }
+      }
+      if (i < 0) continue;
+      for (let l = 0; l < LATS.length; l++) {
+        const b = at(i, LATS[l] * half);
+        boxes.push({ x: b[0], y: b[1], t: 0, age: 1, ph: ph, i });
+        ph += 1.3;
+      }
+    }
+  }
+  // box: 12x12 cube with a '?' (4 colour frames cycled for the shimmer), plus a soft shadow
+  function boxSprites() {
+    const U = PK.U;
+    const rows = [
+      '.kkkkkkkkkk.',
+      'kLLLLLLLLLLk',
+      'kLMMMMMMMMDk',
+      'kLMMwwwwMMDk',
+      'kLMwwMMwwMDk',
+      'kLMMMMMwwMDk',
+      'kLMMMMwwMMDk',
+      'kLMMMwwMMMDk',
+      'kLMMMMMMMMDk',
+      'kLMMMwwMMMDk',
+      'kLDDDDDDDDDk',
+      '.kkkkkkkkkk.'
+    ];
+    const cols = ['#ff4f9a', '#ffb020', '#3fc8ff', '#6ee05a'];
+    SPR.box = cols.map((c) => U.makeSprite(rows, { k: '#1a0d22', L: mixHex(c, '#ffffff', 0.5), M: c, D: U.darken(c, 0.62), w: '#ffffff' }));
+    SPR.boxSh = U.makeSprite(['.xxxxxx.', 'xxxxxxxx', '.xxxxxx.'], { x: 'rgba(0,0,0,0.32)' });
+    // 장바구니 미사일: a teal shopping basket with an orange handle, two wobble frames
+    const mp = { k: '#0e2a26', B: '#2fb6a0', b: '#1d7a6c', w: '#c8fff2', o: '#ff9a20', O: '#ffd060' };
+    SPR.mis[0] = U.makeSprite([
+      '...oooooo...',
+      '..o......o..',
+      '.oO......Oo.',
+      'kkkkkkkkkkkk',
+      'kwBBbBBbBBwk',
+      'kBbBBbBBbBBk',
+      '.kBBbBBbBBk.',
+      '.kbBBbBBbBk.',
+      '..kkkkkkkk..'
+    ], mp);
+    SPR.mis[1] = U.makeSprite([
+      '..oooooo....',
+      '.o......o...',
+      'oO......Oo..',
+      'kkkkkkkkkkkk',
+      'kwBBbBBbBBwk',
+      'kBbBBbBBbBBk',
+      '.kBBbBBbBBk.',
+      '.kbBBbBBbBk.',
+      '..kkkkkkkk..'
+    ], mp);
+    SPR.trail = ['#ffffff', '#ffe060', '#ff9a20', '#c8c8d0'].map((c) => U.makeSprite(['xx', 'xx'], { x: c }));
+  }
+  function mixHex(a, b, t) {
+    const na = parseInt(a.slice(1), 16), nb = parseInt(b.slice(1), 16);
+    const ch = (sh) => Math.round(((na >> sh) & 255) + ((((nb >> sh) & 255) - ((na >> sh) & 255)) * t)).toString(16).padStart(2, '0');
+    return '#' + ch(16) + ch(8) + ch(0);
+  }
+  // place in the race (1 = leader): finished karts and karts with more progress are ahead
+  function placeOf(k, ks) {
+    let pos = 1;
+    for (let i = 0; i < ks.length; i++) { const o = ks[i]; if (o !== k && (o.finished || o.prog > k.prog)) pos++; }
+    return pos;
+  }
+  // position-weighted odds: leaders get defensive items, the back of the pack the strong ones
+  const BOX_W = { banana: 0, turbo: 0, shield: 0, magnet: 0, cloak: 0, missile: 0 };
+  function boxWeights(pos, n) {
+    const f = n > 1 ? (pos - 1) / (n - 1) : 0.5;   // 0 = 1st .. 1 = last
+    BOX_W.banana = 6 + 30 * (1 - f);
+    BOX_W.shield = 6 + 22 * (1 - f);
+    BOX_W.magnet = 12;
+    BOX_W.cloak = 6 + 10 * f;
+    BOX_W.turbo = 6 + 26 * f;
+    BOX_W.missile = pos <= 1 ? 0 : 4 + 24 * f;
+    return BOX_W;
+  }
+  function rollBox(k, ks) {
+    const w = boxWeights(placeOf(k, ks), ks.length);
+    let sum = 0;
+    for (let i = 0; i < BOX_IDS.length; i++) sum += w[BOX_IDS[i]];
+    let r = rnd() * sum;
+    for (let i = 0; i < BOX_IDS.length; i++) { r -= w[BOX_IDS[i]]; if (r < 0) return BOX_IDS[i]; }
+    return 'banana';
+  }
+  function updateBoxes(dt, ks, G) {
+    if (G && G.online) return;
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (b.t > 0) { b.t -= dt; if (b.t <= 0) { b.t = 0; b.age = 0; } continue; }
+      b.age += dt;
+      for (let j = 0; j < ks.length; j++) {
+        const k = ks[j];
+        if (k.finished || k.remote) continue;
+        const dx = k.x - b.x, dy = k.y - b.y;
+        if (dx * dx + dy * dy > BOX_R * BOX_R) continue;
+        b.t = BOX_RESPAWN;
+        if (G && typeof G.pfx === 'function') G.pfx('box', b.x, b.y, 3);
+        if (!k.boxItem && !(k.boxRoll > 0)) {
+          k.boxItem = rollBox(k, ks); k.boxRoll = BOX_ROLL; S(k).boxSince = -1;
+          if (k.isPlayer) sfx(G, 'box');
+          if (G && typeof G.onBox === 'function') G.onBox(k, k.boxItem);
+        }
+        break;
+      }
+    }
+  }
+  // fire the held box item; false when there is none / it is still rolling / the kart can't
+  function useBox(k, G) {
+    const id = k && k.boxItem;
+    if (!id || k.boxRoll > 0 || k.finished || (k.fx && k.fx.spin > 0)) return false;
+    if (G && G.online) return false;
+    switch (id) {
+      case 'banana': {
+        const c = Math.cos(k.a), s = Math.sin(k.a);
+        const p = { x: k.x - c * 9, y: k.y - s * 9, age: 0, owner: k };
+        clampToRoad(k, p, 2);
+        peels.push(p);
+        while (peels.length > MAX_PEELS) peels.shift();
+        if (k.isPlayer) sfx(G, 'skill');
+        break;
+      }
+      case 'turbo': k.boostT = Math.max(k.boostT || 0, 1.5); giveBuff(k, 1.5, 1.22); if (k.isPlayer) sfx(G, 'boost'); break;
+      case 'shield': k.fx.shield = Math.max(k.fx.shield || 0, BOX_SHIELD_T); S(k).wrapT = BOX_SHIELD_T; if (k.isPlayer) sfx(G, 'skill'); break;
+      case 'magnet': k._fmagT = BOX_MAG_T; if (k.isPlayer) sfx(G, 'skill'); break;
+      case 'cloak': usePhase(k); if (k.isPlayer) sfx(G, 'skill'); break;
+      case 'missile': fireMissile(k, G); break;
+      default: return false;
+    }
+    k.boxItem = ''; S(k).boxSince = -1;
+    if (G && typeof G.onBoxUse === 'function') G.onBoxUse(k, id);
+    return true;
+  }
+  // nearest kart ahead in race order (any distance), or null for the leader
+  function aheadKart(k, G) {
+    const ks = (G && G.karts) || [];
+    let best = null, bd = 1e9;
+    for (let i = 0; i < ks.length; i++) {
+      const o = ks[i];
+      if (o === k || o.finished) continue;
+      const d = o.prog - k.prog;
+      if (d > 0 && d < bd) { bd = d; best = o; }
+    }
+    return best;
+  }
+  function fireMissile(k, G) {
+    const t = T();
+    const c = Math.cos(k.a), s = Math.sin(k.a);
+    let fi = k.idx || 0, lat = k.lat || 0;
+    if (t && typeof t.nearestLocal === 'function') {
+      const n = t.nearestLocal(k.idx | 0, k.x + c * 6, k.y + s * 6, 12);
+      if (n) { fi = n.i; lat = n.lat; }
+    }
+    const lim = barrier() - 3;
+    const m = { fi, lat: PK.U.clamp(lat, -lim, lim), x: k.x + c * 6, y: k.y + s * 6, h: 2.5, t: 0, owner: k,
+                speed: Math.max(MIS_V, (k.v || 0) + 110), target: aheadKart(k, G) };
+    placeMelon(m);
+    missiles.push(m);
+    while (missiles.length > MAX_MIS) missiles.shift();
+    if (k.isPlayer || (m.target && m.target.isPlayer)) sfx(G, 'missile');
+  }
+  function updateMissiles(dt, ks, G) {
+    const t = T();
+    if (!t || !t.PTS) return;
+    const N = t.N, lim = barrier() - 2;
+    for (let i = missiles.length - 1; i >= 0; i--) {
+      const m = missiles[i];
+      m.t += dt;
+      m.speed += MIS_ACC * dt;
+      if (m.t > MIS_LIFE) { if (G && G.pfx) G.pfx('fizz', m.x, m.y, m.h); missiles.splice(i, 1); continue; }
+      let tg = m.target;
+      if (!tg || tg.finished || tg.fx.phase > 0 || idxAhead(m.fi, tg.idx || 0, N) > N * 0.5) {
+        tg = null; let bd = 80;
+        for (let j = 0; j < ks.length; j++) {
+          const k = ks[j];
+          if (k === m.owner || k.finished || k.fx.phase > 0) continue;
+          const d = idxAhead(m.fi, k.idx || 0, N);
+          if (d < bd) { bd = d; tg = k; }
+        }
+        m.target = tg;
+      }
+      const dx = tg ? tg.x - m.x : 0, dy = tg ? tg.y - m.y : 0;
+      if (tg && dx * dx + dy * dy < 26 * 26) {
+        const dd = Math.hypot(dx, dy) || 1, st = Math.min(dd, m.speed * dt);
+        m.x += dx / dd * st; m.y += dy / dd * st;
+        m.fi = tg.idx || m.fi; m.lat = tg.lat || 0;
+      } else {
+        if (tg && idxAhead(m.fi, tg.idx || 0, N) < 60) m.lat += PK.U.clamp((tg.lat || 0) - m.lat, -8, 8) * 5 * dt;
+        m.lat = PK.U.clamp(m.lat, -lim, lim);
+        const i0 = wrapI(Math.floor(m.fi), N);
+        const p0 = t.PTS[i0], p1 = t.PTS[(i0 + 1) % N];
+        const seg = Math.max(0.5, Math.hypot(p1[0] - p0[0], p1[1] - p0[1]));
+        m.fi += (m.speed * dt) / seg;
+        if (m.fi >= N) m.fi -= N;
+        placeMelon(m);
+      }
+      m.h = 2.5 + Math.sin(m.t * 12) * 0.5;
+      for (let j = 0; j < ks.length; j++) {
+        const k = ks[j];
+        if (k === m.owner || k.fx.ghost > 0 || k.fx.phase > 0) continue;
+        const ex = k.x - m.x, ey = k.y - m.y;
+        if (ex * ex + ey * ey < MIS_R * MIS_R) {
+          const ok = hitKart(k, 'spin', MIS_STUN, G, m.owner);
+          if (G && G.pfx) G.pfx('boom', m.x, m.y, 2);
+          if (G && typeof G.onMissileHit === 'function') G.onMissileHit(k, m.owner, ok);
+          missiles.splice(i, 1);
+          break;
+        }
+      }
+    }
+  }
+  // a missile is closing in on k (HUD warning / AI defence)
+  function incoming(k) {
+    for (let i = 0; i < missiles.length; i++) {
+      const m = missiles[i];
+      if (m.target !== k || m.owner === k) continue;
+      const dx = m.x - k.x, dy = m.y - k.y;
+      if (dx * dx + dy * dy < 90 * 90) return true;
+    }
+    return false;
+  }
+  // AI: when to fire the held box item (also drives the player's kart in attract races)
+  const NB = { aheadF: 0, aheadSide: 0, behindF: 0, behindSide: 0 };
+  function nearby(k, ks) {
+    const c = Math.cos(k.a), sn = Math.sin(k.a);
+    NB.aheadF = 1e9; NB.aheadSide = 0; NB.behindF = 1e9; NB.behindSide = 0;
+    for (let i = 0; i < ks.length; i++) {
+      const o = ks[i];
+      if (o === k) continue;
+      const dx = o.x - k.x, dy = o.y - k.y;
+      const f = dx * c + dy * sn, sd = -dx * sn + dy * c;
+      if (f > 0 && f < NB.aheadF && Math.abs(sd) < f * 0.45 + 10) { NB.aheadF = f; NB.aheadSide = sd; }
+      if (f < 0 && -f < NB.behindF && Math.abs(sd) < 18) { NB.behindF = -f; NB.behindSide = sd; }
+    }
+    return NB;
+  }
+  function aiBox(k, G) {
+    if (!k.boxItem || k.boxRoll > 0 || k.finished || k.remote || (k.fx && k.fx.spin > 0)) return false;
+    if (k.isPlayer && !(G && G.attract)) return false;
+    const s = S(k);
+    if (s.boxSince < 0) { s.boxSince = clock; s.boxDelay = 0.4 + rnd() * 1.2; return false; }
+    const w = clock - s.boxSince;
+    if (w < s.boxDelay) return false;
+    const pf = 1 / 60, ks = (G && G.karts) || [], t = T(), N = (t && t.N) || 1;
+    const nb = nearby(k, ks), c = Math.cos(k.a), sn = Math.sin(k.a);
+    switch (k.boxItem) {
+      case 'banana':
+        if (nb.behindF < 35 && Math.abs(nb.behindSide) < 10) return rnd() < 18 * pf;
+        return w > 10;
+      case 'shield':
+        if (dangerNear(k, c, sn)) return true;
+        return w > 8 && rnd() < 0.5 * pf;
+      case 'cloak':
+        if (dangerNear(k, c, sn)) return true;
+        if (nb.aheadF < 14 && Math.abs(nb.aheadSide) < 6) return rnd() < 18 * pf;
+        return w > 9;
+      case 'turbo': {
+        if (k.drift || k.offroad) return false;
+        if (t && t.TAN) {
+          const i = k.idx | 0;
+          const straight = Math.abs(PK.U.angDiff(t.TAN[wrapI(i, N)], t.TAN[wrapI(i + 14, N)])) < 0.15;
+          const aligned = Math.abs(PK.U.angDiff(t.TAN[wrapI(i, N)], k.a)) < 0.18;
+          if (straight && aligned) return rnd() < 12 * pf;
+        }
+        return w > 6;
+      }
+      case 'magnet': return true;
+      case 'missile': {
+        const tg = aheadKart(k, G);
+        if (!tg) return w > 12;
+        if (tg.prog - k.prog < 0.3 * N) return rnd() < 12 * pf;
+        return w > 6;
+      }
+    }
+    return true;
+  }
 
   // ---------------------------------------------------------------- use
   function canUse(k, G) {
@@ -689,6 +1028,22 @@ window.PK = window.PK || {};
       '....bbbb....'
     ], { b: '#203880', B: '#4080e0', w: '#c0e0ff', y: '#ffe040' });
     ITEMS.cloak.icon = DEFS.phase.icon;
+    BOX.banana.icon = DEFS.banana.icon; BOX.turbo.icon = ITEMS.turbo.icon; BOX.shield.icon = ITEMS.shield.icon;
+    BOX.magnet.icon = ITEMS.magnet.icon; BOX.cloak.icon = ITEMS.cloak.icon;
+    BOX.missile.icon = U.makeSprite([
+      '....oooo....',
+      '...o....o...',
+      '..oO....Oo..',
+      'kkkkkkkkkkkk',
+      'kwBBbBBbBBwk',
+      'kBbBBbBBbBBk',
+      '.kBBbBBbBBk.',
+      '.kbBBbBBbBk.',
+      '..kkkkkkkk..',
+      '...y.yy.y...',
+      '..y.y..y.y..',
+      '...y....y...'
+    ], { k: '#0e2a26', B: '#2fb6a0', b: '#1d7a6c', w: '#c8fff2', o: '#ff9a20', O: '#ffd060', y: '#ffd040' });
   }
 
   // fire a shop item for kart k; returns true when it went off (main.js then consumes it)
@@ -737,6 +1092,17 @@ window.PK = window.PK || {};
     const t = T();
     updateFoods(dt, ks, G);
     updateSale(dt);
+    updateBoxes(dt, ks, G);
+    updateMissiles(dt, ks, G);
+    for (let i = 0; i < ks.length; i++) {
+      const k = ks[i];
+      if (k._fmagT > 0) k._fmagT = Math.max(0, k._fmagT - dt);
+      if (k.boxRoll > 0) {
+        k.boxRoll -= dt;
+        if (k.boxRoll <= 0) { k.boxRoll = 0; if (k.isPlayer) sfx(G, 'gauge'); }
+      }
+      if (k.boxItem && !(G && G.online) && aiBox(k, G)) useBox(k, G);
+    }
     for (let i = glitches.length - 1; i >= 0; i--) { glitches[i].t -= dt; if (glitches[i].t <= 0) glitches.splice(i, 1); }
 
     // cooldowns + per-kart timed effects
@@ -1033,6 +1399,12 @@ window.PK = window.PK || {};
       const dx = b.x - k.x, dy = b.y - k.y;
       if (b.target === k && dx * dx + dy * dy < 60 * 60) return true;
     }
+    for (let i = 0; i < missiles.length; i++) {
+      const m = missiles[i];
+      if (m.owner === k || m.target !== k) continue;
+      const dx = m.x - k.x, dy = m.y - k.y;
+      if (dx * dx + dy * dy < 70 * 70) return true;
+    }
     return false;
   }
 
@@ -1043,6 +1415,33 @@ window.PK = window.PK || {};
       const f = foods[i];
       if (f.t > 0) continue;
       emit(f.x, f.y, 1 + Math.sin(clock * 3 + f.ph) * 0.6, foodSpr[f.kind], 8);
+    }
+    // item boxes: bob, fake-spin (width pulses) and shimmer through 4 colours; pop in on respawn
+    const online = PK.Game && PK.Game.online;
+    if (!online && SPR.box.length) {
+      for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        if (b.t > 0) continue;
+        const sc = b.age < 0.3 ? 0.3 + b.age / 0.3 * 0.7 : 1;
+        const spin = 0.72 + 0.28 * Math.abs(Math.cos(clock * 2.2 + b.ph));
+        emit(b.x, b.y, 0, SPR.boxSh, 4.2 * sc);
+        emit(b.x, b.y, 2.4 + Math.sin(clock * 2.6 + b.ph) * 0.7, SPR.box[((clock * 3 + b.ph) | 0) & 3], 5 * sc * spin);
+      }
+    }
+    for (let i = 0; i < missiles.length; i++) {
+      const m = missiles[i];
+      emit(m.x, m.y, m.h, SPR.mis[((m.t * 12) | 0) & 1], 4.6);
+      // flame + smoke trail behind it (back along the track direction)
+      const ta = tanAt(m.fi), c = Math.cos(ta), sn = Math.sin(ta);
+      for (let j = 0; j < 4; j++) {
+        const u = ((clock * 7 + j * 0.25) % 1);
+        emit(m.x - c * (2 + u * 7), m.y - sn * (2 + u * 7), m.h + 0.6 + u * 1.5, SPR.trail[j === 0 ? 1 : u < 0.4 ? 2 : 3], 1.3 * (1 - u * 0.5));
+      }
+    }
+    const gk = (PK.Game && PK.Game.karts) || [];
+    for (let i = 0; i < gk.length; i++) {
+      const k = gk[i];
+      if (k._fmagT > 0) emit(k.x, k.y, 9 + Math.sin(clock * 12) * 0.4, SPR.magnet, 4);
     }
     for (let i = 0; i < peels.length; i++) {
       const p = peels[i];
@@ -1124,5 +1523,9 @@ window.PK = window.PK || {};
     return out;
   }
 
-  PK.Skills = { DEFS, ITEMS, ITEM_IDS, init, reset, tryUse, useItem, itemMagnet, startSale, saleLeft, foodIcon, foodName, update, aiWants, sprites };
+  // test / console helpers: give a kart a box item (skips the roulette), inspect boxes and missiles
+  function giveBox(k, id) { if (!k || !BOX[id]) return false; k.boxItem = id; k.boxRoll = 0; S(k).boxSince = -1; return true; }
+  const boxInfo = () => ({ boxes: boxes.length, active: boxes.filter((b) => !(b.t > 0)).length, missiles: missiles.length, rows: boxes.map((b) => b.i) });
+  PK.Skills = { DEFS, ITEMS, ITEM_IDS, BOX, BOX_IDS, BOX_ROLL, init, reset, tryUse, useItem, useBox, giveBox, boxWeights, boxInfo, incoming,
+    itemMagnet, startSale, saleLeft, foodIcon, foodName, update, aiWants, sprites };
 })(window.PK);

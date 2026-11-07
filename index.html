@@ -162,6 +162,15 @@
   #mapBanner.glitch b { color: #60ffd8; text-shadow: -.08em 0 0 #ff40d0, .08em 0 0 #30e8ff; }
   #mapBanner.sale { background: rgba(60, 10, 10, .92); box-shadow: .25em .25em 0 #000, inset 0 .15em 0 #ff4040; }
   #mapBanner.sale b { color: #ffe14d; font-size: 1.6em; }
+  /* ---------- 추월! popup (race) ---------- */
+  #ovt { position: absolute; left: 50%; top: 34%; z-index: 3; display: none; pointer-events: none; white-space: nowrap;
+    transform: translateX(-50%); font-size: 1.5em; color: #fff; letter-spacing: .05em; padding: .05em .5em;
+    background: rgba(255, 106, 0, .82); border: .15em solid #000; box-shadow: .18em .18em 0 #000; text-shadow: .08em .08em 0 #000; }
+  #ovt.on { display: block; animation: ovtPop .9s steps(9) forwards; }
+  #ovt.top { background: rgba(255, 190, 0, .9); color: #1a0d00; text-shadow: none; }
+  @keyframes ovtPop { 0% { opacity: 0; transform: translateX(-50%) scale(.5); } 15% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+    30% { transform: translateX(-50%) scale(1); } 75% { opacity: 1; transform: translateX(-50%) translateY(0); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-.6em); } }
   /* ---------- title extras / coins ---------- */
   #title .trow .btn { font-size: .8em; padding: .25em .7em; min-height: 2.3em; }
   #btnShop, #btnDex, #btnAch, #btnRank { font-size: .95em; min-height: 2.5em; }
@@ -269,7 +278,8 @@
           <dt>Space / Shift</dt><dd>드리프트 (게이지 충전)</dd>
           <dt>Z</dt><dd>부스터 사용</dd>
           <dt>X</dt><dd>고유 스킬</dd>
-          <dt>C</dt><dd>상점 아이템 (레이스당 1번)</dd>
+          <dt>C</dt><dd>아이템 (❓ 상자 아이템 먼저, 없으면 상점 아이템)</dd>
+          <dt>GO 직전 ↑</dt><dd>로켓 스타트! (너무 일찍 누르면 헛바퀴)</dd>
           <dt>M</dt><dd>소리 켜기/끄기</dd>
           <dt>R</dt><dd>재시작</dd>
           <dt>Esc / P / ⏸</dt><dd>일시정지</dd>
@@ -392,6 +402,7 @@
   <!-- 레이스 중 일시정지 버튼 / 맵 이름 배너 -->
   <button id="btnPause" aria-label="일시정지">⏸</button>
   <div id="mapBanner"></div>
+  <div id="ovt"></div>
 
   <!-- 터치 컨트롤 (coarse pointer 전용) -->
   <div id="touch">
@@ -412,10 +423,6 @@
 <script src="js/karts.js"></script>
 <script src="js/skills.js"></script>
 <script src="js/music.js"></script>
-<!-- real 3D view: Three.js (if it can't load, e.g. offline, the game stays in the classic 2D view) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="js/kart3d.js"></script>
-<script src="js/render3d.js"></script>
 <script src="js/rank-config.js"></script>
 <script src="js/rank.js"></script>
 <!-- online 2P: PeerJS (WebRTC + free PeerJS cloud signalling); async so a slow/blocked CDN never delays the game -->

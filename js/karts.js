@@ -17,7 +17,7 @@ window.PK = window.PK || {};
   const COAST = 28;             // rolling friction (plus small v-proportional drag)
   const DRIFT_MIN_V = 65;       // speed needed to start a drift
   const DRIFT_END_V = 40;       // drift is cancelled below this
-  const MT_SMALL = 0.7, MT_BIG = 1.5;   // mini-turbo charge thresholds (s)
+  const MT_SMALL = 0.7, MT_BIG = 1.5, MT_ULTRA = 2.4;   // mini-turbo charge thresholds (s): blue / orange / purple sparks
   const PAD_R = 9;              // boost pad detection radius
   const KART_R = 4;             // collision radius
   const RESTITUTION = 0.45;
@@ -791,6 +791,9 @@ window.PK = window.PK || {};
     const boostBtn = !!inp.boost, skillBtn = !!inp.skill;
     const spinning = fx.spin > 0;
     if (spinning) { steerRaw = 0; gas = false; brake = false; driftBtn = false; }
+    // wheel-spin stall (rocket start pressed too early, main.js): no drive for a moment
+    if (k._stallT > 0) { k._stallT = Math.max(0, k._stallT - dt); gas = false; }
+    k._brake = brake && k.v > 35;
     steerRaw = clamp(steerRaw, -1, 1);
     // smooth steering (digital keys -> analog feel): ramp in at 7/s, settle back faster (12/s)
     const back = Math.abs(steerRaw) < Math.abs(k.steerIn) || steerRaw * k.steerIn < 0;
@@ -808,6 +811,8 @@ window.PK = window.PK || {};
     if (fx.buff > 0) { fx.buff = Math.max(0, fx.buff - dt); if (fx.buff === 0) fx.buffMul = 1; }
     if (k.boostT > 0) k.boostT = Math.max(0, k.boostT - dt);
     if (k._bumpT > 0) k._bumpT -= dt;
+    if (k._wallT > 0) k._wallT -= dt;
+    if (k._mtBurst > 0) k._mtBurst -= dt;
     if (k._obsT > 0) k._obsT -= dt;
     if (k._obsAge < 99) k._obsAge += dt;
     if (k._obsPass > 0) k._obsPass -= dt;
@@ -861,8 +866,9 @@ window.PK = window.PK || {};
       // release -> mini-turbo
       const cm = 1 + COMBO_STEP * Math.max(0, k.combo - 1);
       if (!spinning && k.v >= DRIFT_END_V) {
-        if (k.charge >= MT_BIG) { k.boostT = Math.max(k.boostT, 1.0); addGauge(k, 12 * cm, G); sfx(G, k, 'boost'); }
-        else if (k.charge >= MT_SMALL) { k.boostT = Math.max(k.boostT, 0.5); addGauge(k, 6 * cm, G); sfx(G, k, 'boost'); }
+        if (k.charge >= MT_ULTRA) { k.boostT = Math.max(k.boostT, 1.3); addGauge(k, 16 * cm, G); sfx(G, k, 'boost'); k._mtTier = 3; k._mtBurst = 0.3; }
+        else if (k.charge >= MT_BIG) { k.boostT = Math.max(k.boostT, 1.0); addGauge(k, 12 * cm, G); sfx(G, k, 'boost'); k._mtTier = 2; k._mtBurst = 0.3; }
+        else if (k.charge >= MT_SMALL) { k.boostT = Math.max(k.boostT, 0.5); addGauge(k, 6 * cm, G); sfx(G, k, 'boost'); k._mtTier = 1; k._mtBurst = 0.25; }
       }
       if (spinning || k.charge < MT_SMALL) k.combo = 0;   // a fizzled drift breaks the chain
       k.drift = false; k.driftDir = 0; k.charge = 0; k._sinceDrift = 0;
@@ -870,7 +876,7 @@ window.PK = window.PK || {};
 
     // ---- speed cap ----
     let cap = d.maxV;
-    const offMul = 0.5 + w * 0.04;               // heavy karts are less slowed offroad (0.54 .. 0.70)
+    const offMul = 0.42 + w * 0.04;              // heavy karts are less slowed offroad (0.46 .. 0.62)
     if (k.offroad && k.boostT <= 0) cap *= offMul;
     if (k.boostT > 0) cap *= d.boostPow;
     if (fx.slow > 0) cap *= 0.55;
@@ -1026,15 +1032,26 @@ window.PK = window.PK || {};
     // invisible wall
     if (Math.abs(r.lat) > T.BARRIER) {
       const t = T.TAN[r.i], p = T.PTS[r.i], s = r.lat > 0 ? 1 : -1;
-      const lat = s * (T.BARRIER - 0.5);
+      // how hard it hit: the speed going into the wall (straight-on hits hurt, glancing ones scrape)
+      const imp = Math.abs(k.v) * Math.abs(Math.sin(angDiff(t, k.ma)));
+      const hard = imp > 38 && k._bumpT <= 0 && !(k.fx && k.fx.phase > 0);
+      // a hard hit bounces the kart back off the wall a little
+      const lat = s * (T.BARRIER - (hard ? 2.6 : 0.5));
       k.x = p[0] - Math.sin(t) * lat; k.y = p[1] + Math.cos(t) * lat; k.lat = lat;
       // deflect movement along the wall (keep the tangential part, point slightly inward)
       const along = Math.abs(angDiff(t, k.ma)) <= Math.PI / 2 ? t : t + Math.PI;
       const fwdSign = along === t ? 1 : -1;
       const outward = Math.sin(angDiff(along, k.ma)) * s * fwdSign > 0;
       if (outward) k.ma = wrapAng(along - s * fwdSign * 0.12);
-      if (k._bumpT <= 0) {
-        k.v *= 0.6; k._bumpT = 0.35; sfx(G, k, 'bump');
+      if (hard) {
+        // 쿵! big speed loss, a dust puff and (player) a thud + small shake
+        k.v *= 0.4; k._bumpT = 0.45; k._wallT = 0.35; k._wallSide = s;
+        k.ma = wrapAng(k.ma - s * 0.25 * (Math.abs(angDiff(t, k.ma)) <= Math.PI / 2 ? 1 : -1));   // kicked back inward
+        sfx(G, k, 'wall');
+        if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
+        k.combo = 0;
+      } else if (k._bumpT <= 0) {
+        k.v *= 0.8; k._bumpT = 0.35; sfx(G, k, 'bump');   // a scrape along the wall
         if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
       } else k.v *= 1 - 1.2 * dt;
       // nudge heading back toward track direction
@@ -1195,7 +1212,7 @@ window.PK = window.PK || {};
       fx.slow = Math.max(fx.slow, (dur || 2) * (1.15 - k.def.weight * 0.07));
     }
     const G = PK.Game;
-    if (k.isPlayer && G && G.sfx) G.sfx('hit');
+    if (k.isPlayer && G && G.sfx) { G.sfx('hit'); if (type === 'spin') G.sfx('skid'); }
     return true;
   }
 
@@ -1353,6 +1370,7 @@ window.PK = window.PK || {};
   // drawFx: cheap pixel particles around the kart on screen
   // ---------------------------------------------------------------------------
   const STAR_COLS = ['#fff27a', '#ffffff', '#ffd040'];
+  const SPARK = [['#ffffff', '#d8e0ff'], ['#40a0ff', '#a0e0ff', '#ffffff'], ['#ff9a20', '#ffd040', '#fff0a0'], ['#b040ff', '#e0a0ff', '#ff70f0', '#ffffff']];
   function drawFx(g, k, sx, sy, w) {
     if (!g || !(w > 0)) return;
     const s = Math.max(1, Math.round(w / 16));
@@ -1362,31 +1380,74 @@ window.PK = window.PK || {};
     const R = Math.random;
     const px = (x, y, c, sz) => { g.fillStyle = c; g.fillRect(x | 0, y | 0, sz || s, sz || s); };
 
-    // drift sparks at rear wheels
+    // drift: tyre smoke puffs, then sparks at the rear wheels whose colour shows the mini-turbo
+    // tier (white -> blue -> orange -> purple)
+    if (k.drift && Math.abs(k.v) > 30 && R() < 0.6) {
+      const side = k.driftDir > 0 ? lx : rx;
+      px(side + (R() * 6 - 3) * s, by - (1 + R() * 4) * s, R() < 0.5 ? 'rgba(220,220,230,0.55)' : 'rgba(180,180,190,0.45)', s * 2);
+    }
     if (k.drift && k.charge > 0.15) {
-      const c = k.charge >= MT_BIG ? (R() < 0.5 ? '#ff9a20' : '#ffd040') : k.charge >= MT_SMALL ? (R() < 0.5 ? '#40a0ff' : '#a0e0ff') : '#ffffff';
-      const n = k.charge >= MT_SMALL ? 4 : 2;
+      const tier = k.charge >= MT_ULTRA ? 3 : k.charge >= MT_BIG ? 2 : k.charge >= MT_SMALL ? 1 : 0;
+      const pal = SPARK[tier];
+      const n = 2 + tier + (tier >= 2 ? 1 : 0);
       for (let i = 0; i < n; i++) {
-        px(lx + (R() * 6 - 3) * s, by - R() * 3 * s, c);
-        px(rx + (R() * 6 - 3) * s, by - R() * 3 * s, c);
+        const c = pal[(R() * pal.length) | 0], big = tier >= 2 && R() < 0.3 ? s + 1 : s;
+        px(lx + (R() * 7 - 3.5) * s, by - R() * (3 + tier) * s, c, big);
+        px(rx + (R() * 7 - 3.5) * s, by - R() * (3 + tier) * s, c, big);
       }
     }
-    // boost flame from under the basket, between the wheels
+    // mini-turbo release: a short ring of sparks in the tier colour
+    if (k._mtBurst > 0) {
+      const pal = SPARK[k._mtTier || 1], u = 1 - k._mtBurst / 0.3, rr = w * (0.25 + u * 0.5);
+      for (let i = 0; i < 8; i++) {
+        const an = i * TAU / 8 + u;
+        px(sx + Math.cos(an) * rr, by - w * 0.15 + Math.sin(an) * rr * 0.45, pal[i % pal.length]);
+      }
+    }
+    // boost flame from under the basket, between the wheels (longer, two-pixel core)
     if (k.boostT > 0) {
       const ex1 = Math.round(sx - w * 0.19), ex2 = Math.round(sx + w * 0.19), ey = by - Math.round(w * 0.2);
-      const len = 2 + ((R() * 3) | 0);
+      const len = 3 + ((R() * 4) | 0) + (k.boostT > 1 ? 1 : 0);
       for (let i = 0; i < len; i++) {
-        const c = i === 0 ? '#ffffff' : i < 2 ? '#ffe060' : '#ff7a20';
-        px(ex1 + (R() < 0.5 ? 0 : -s), ey + i * s, c);
-        px(ex2 + (R() < 0.5 ? 0 : s), ey + i * s, c);
+        const c = i === 0 ? '#ffffff' : i < 2 ? '#fff4a0' : i < 4 ? '#ffb030' : '#ff5a20';
+        const wob = R() < 0.5 ? 0 : s;
+        px(ex1 - wob, ey + i * s, c, i < 3 ? s + (s > 1 ? 1 : 0) : s);
+        px(ex2 + wob, ey + i * s, c, i < 3 ? s + (s > 1 ? 1 : 0) : s);
+        if (i >= 2 && R() < 0.35) { px(ex1 - s * 2 * R(), ey + i * s, '#ff7a20'); px(ex2 + s * 2 * R(), ey + i * s, '#ff7a20'); }
       }
     }
-    // offroad dust
+    // offroad dust (bigger, sandier clouds kicked out sideways)
     if (k.offroad && Math.abs(k.v) > 25) {
-      for (let i = 0; i < 3; i++) {
-        const c = R() < 0.5 ? '#a08a68' : '#c8b490';
-        px(lx - R() * 5 * s, by - R() * 4 * s, c);
-        px(rx + R() * 5 * s, by - R() * 4 * s, c);
+      const n = Math.abs(k.v) > 70 ? 5 : 3;
+      for (let i = 0; i < n; i++) {
+        const c = R() < 0.4 ? '#a08a68' : R() < 0.7 ? '#c8b490' : 'rgba(214,200,168,0.6)';
+        const sz = R() < 0.4 ? s * 2 : s;
+        px(lx - R() * 7 * s, by - R() * 5 * s, c, sz);
+        px(rx + R() * 7 * s, by - R() * 5 * s, c, sz);
+      }
+    }
+    // 쿵! wall hit: a burst of grey-brown dust and white sparks on the wall side
+    if (k._wallT > 0) {
+      const f = k._wallT / 0.35, ex = k._wallSide > 0 ? rx : lx, dir = k._wallSide > 0 ? 1 : -1;
+      for (let i = 0; i < 7; i++) {
+        const c = R() < 0.3 ? '#ffffff' : R() < 0.6 ? '#b8a890' : 'rgba(200,190,170,0.7)';
+        px(ex + dir * R() * 10 * s * (1.3 - f), by - R() * 9 * s * (1.2 - f * 0.5), c, R() < 0.5 ? s * 2 : s);
+      }
+    }
+    // hard braking: grey tyre smoke at both wheels
+    if (k._brake && !k.offroad) {
+      for (let i = 0; i < 2; i++) {
+        const c = R() < 0.5 ? 'rgba(210,210,220,0.6)' : 'rgba(160,160,172,0.5)';
+        px(lx + (R() * 4 - 2) * s, by - R() * 3 * s, c, s * 2);
+        px(rx + (R() * 4 - 2) * s, by - R() * 3 * s, c, s * 2);
+      }
+    }
+    // wheel-spin stall (rocket start too early): a puff of white/grey smoke
+    if (k._stallT > 0) {
+      for (let i = 0; i < 4; i++) {
+        const c = R() < 0.5 ? 'rgba(240,240,245,0.75)' : 'rgba(170,170,180,0.6)';
+        px(lx + (R() * 8 - 4) * s, by - R() * 6 * s, c, s * 2);
+        px(rx + (R() * 8 - 4) * s, by - R() * 6 * s, c, s * 2);
       }
     }
     // puddle (milk) splash

@@ -167,9 +167,9 @@ window.PK = window.PK || {};
   // easy controls ('쉬운 조작', on by default): auto gas, steering help toward the racing line, auto drift
   const LS_EASY = 'pk_easy';
   let easy = true;
-  // real 3D view (js/render3d.js + Three.js), always on; only if it can't load or breaks does the
-  // game fall back to the classic Mode-7 view
-  let view3d = true;
+  // real 3D view (js/render3d.js + Three.js) — off: the user chose the pixel Mode-7 map again.
+  // Set to true (and load three.js + render3d.js in index.html) to bring the 3D map back.
+  let view3d = false;
   const use3d = () => view3d && PK.R3D && PK.R3D.available;
   function toggleEasy() {
     easy = !easy;
@@ -184,6 +184,18 @@ window.PK = window.PK || {};
   }
   let foodRace = 0, coinsBanked = false;   // foods eaten this race (coins), banked yet?
   let raceItem = '', itemUsed = false, itemPrev = false;
+  // 🚀 rocket start: gas first pressed in the last RS_WIN s of the "1" -> RS_BOOST s boost at GO;
+  // gas held since the "3" (cdT > RS_EARLY when the hold began) -> RS_STALL s wheel-spin stall.
+  // AI karts: RS_AI_GOOD chance of a good start (a slightly shorter boost), else a normal one.
+  const RS_WIN = 0.35, RS_EARLY = 2.0, RS_BOOST = 1.2, RS_STALL = 0.4, RS_AI_GOOD = 0.35, RS_AI_BOOST = 1.0;
+  let rsFrom = -1;   // cdT when the current gas hold began (-1 = not held)
+  // 💨 position feedback: a new place must hold POS_HOLD s before it counts (no flicker side by side)
+  const POS_HOLD = 0.2, POS_PULSE = 0.45, POS_FLASH = 0.5;
+  let posShown = -1, posCand = -1, posCandT = 0, posPulse = 0, posFlash = 0, ovtCool = 0, ovtT = 0;
+  // ✨ juice: speed-line burst on a fresh boost, finish confetti
+  let speedBurst = 0, lastBoostT = 0, confT = 0, tbHas = null;
+  // counters for tests / the console (PK.Game.dbg)
+  G.dbg = { rocket: '', rocketAI: 0, overtakes: 0, overtaken: 0, boxGot: 0, boxUsed: 0, boxUsedAI: 0, missileHits: 0, podium: 0, confetti: 0, parts: 0 };
 
   // best times per map: map 0 keeps the old key, the others 'pk_best_v1_m<id>'
   const bestKey = (id) => (id === 0 ? LS_BEST : LS_BEST + '_m' + id);
@@ -247,6 +259,7 @@ window.PK = window.PK || {};
       ctInfo: document.getElementById('ctInfo'), ctGhost: document.getElementById('ctGhost'), ctGlitch: document.getElementById('ctGlitch'),
       btnTest: document.getElementById('btnTest'), btnMapTest: document.getElementById('btnMapTest'),
       mtest: document.getElementById('mtest'), mtList: document.getElementById('mtList'),
+      ovt: document.getElementById('ovt'),
     };
     calm = lsGet(LS_CALM) !== '0';   // calm (no shake / flicker) is on unless the player turned it off
     easy = lsGet(LS_EASY) !== '0';   // easy controls too
@@ -290,7 +303,8 @@ window.PK = window.PK || {};
     else if (which !== 'race') musicPlay(-1);   // menus: calm title loop
     const racing = which === 'race' || which === 'pause';
     show(el.touch, coarse && which === 'race');
-    if (el.tbItem) el.tbItem.style.display = raceItem && !ITEMS()[raceItem].auto ? '' : 'none';
+    if (el.tbItem) el.tbItem.style.display = !G.online || (raceItem && !ITEMS()[raceItem].auto) ? '' : 'none';
+    tbHas = null;
     show(el.btnPause, which === 'race');
     if (!racing) hideMapBanner();
   }
@@ -699,6 +713,7 @@ window.PK = window.PK || {};
     raceItem = equipped(); itemUsed = false; itemPrev = true;
     if (el.tbItem) el.tbItem.classList.remove('used');
     foodRace = 0; coinsBanked = false; saleAt = -1; saleDone = false;
+    rsFrom = -1;
     G.state = 'countdown';
     showOnly('race');
     setupRace(defIdx, false, mapId);
@@ -720,6 +735,31 @@ window.PK = window.PK || {};
     if (el.tbItem) el.tbItem.classList.add('used');
     return true;
   }
+  // C / touch '아이템': an item-box item (or one still rolling) goes first, else the shop item
+  function pressItem() {
+    const p = G.player;
+    if (p && !G.online && (p.boxItem || p.boxRoll > 0)) { useBoxItem(); return; }
+    useRaceItem();
+  }
+  function useBoxItem() {
+    const p = G.player;
+    if (!p || G.attract || G.state !== 'race' || !PK.Skills.useBox) return false;
+    return PK.Skills.useBox(p, G);
+  }
+  // item-box hooks (js/skills.js)
+  G.onBox = (k) => { if (!G.attract && k.isPlayer) G.dbg.boxGot++; };
+  G.onBoxUse = (k, id) => {
+    if (G.attract) return;
+    if (k.isPlayer) { G.dbg.boxUsed++; const B = PK.Skills.BOX && PK.Skills.BOX[id]; toast(B ? B.en : 'ITEM!'); }
+    else G.dbg.boxUsedAI++;
+  };
+  G.onMissileHit = (victim, owner, ok) => {
+    if (G.attract) return;
+    G.dbg.missileHits++;
+    if (!ok) { if (victim.isPlayer) toast('BLOCKED!'); return; }
+    if (victim.isPlayer) toast('BASKET HIT!');
+    else if (owner && owner.isPlayer) toast('DIRECT HIT!');
+  };
   const ITEM_EN = { rocket: 'ROCKET START!', turbo: 'TURBO!', magnet: 'FOOD MAGNET!', banana: 'BANANA BOMB!', shield: 'SHIELD!', cloak: 'CLOAK!' };
   // ---- 음식 도감: { foodIndex: times eaten }. A new food pays DEX_NEW coins, the full set DEX_ALL.
   const LS_DEX = 'pk_dex', DEX_N = 16, DEX_NEW = 2, DEX_ALL = 30;
@@ -946,6 +986,163 @@ window.PK = window.PK || {};
     startRace(playerDef, REGULAR[(REGULAR.indexOf(baseMap) + 1) % REGULAR.length], true);
   }
 
+  // gas held during the countdown (keys, touch gas, or the virtual joystick pushed anywhere but down)
+  function cdGas() {
+    const J = PK.Joy;
+    return !!(keys.ArrowUp || keys.KeyW || touch.gas || (J && J.active && (+J.y || 0) < 0.45));
+  }
+  function rocketStart() {
+    const p = G.player;
+    let res = 'normal';
+    if (p && rsFrom >= 0) res = rsFrom <= RS_WIN ? 'good' : rsFrom > RS_EARLY ? 'early' : 'normal';
+    if (p && res === 'good') {
+      p.boostT = Math.max(p.boostT || 0, RS_BOOST); p.v = Math.max(p.v || 0, 45);
+      toast('ROCKET START!'); sfx('boost'); speedBurst = 0.5; boostKick(0.35);
+      pfx('rocket', p.x, p.y, 0, p.a);
+    } else if (p && res === 'early') {
+      p._stallT = RS_STALL; toast('TOO EARLY!'); sfx('stall');
+      pfx('stall', p.x, p.y, 0, p.a);
+    }
+    G.dbg.rocket = res;
+    G.dbg.rocketAI = 0;
+    for (let i = 0; i < G.karts.length; i++) {
+      const k = G.karts[i];
+      if (k === p || k.remote) continue;
+      if (Math.random() < RS_AI_GOOD) { k.boostT = Math.max(k.boostT || 0, RS_AI_BOOST); k.v = Math.max(k.v || 0, 35); G.dbg.rocketAI++; }
+    }
+    rsFrom = -1;
+  }
+  // overtakes: the player's place (stable for POS_HOLD s) went up / down
+  function trackPos(dt) {
+    const p = G.player;
+    if (!p || p.finished || G.attract) return;
+    const pos = computeStandings().indexOf(p);
+    if (posShown < 0) { posShown = pos; posCand = pos; return; }
+    if (pos !== posCand) { posCand = pos; posCandT = 0; } else posCandT += dt;
+    if (pos === posShown || posCandT < POS_HOLD) return;
+    if (pos < posShown) {
+      posPulse = POS_PULSE; posFlash = 0; G.dbg.overtakes++;
+      if (ovtCool <= 0) { showOvertake(pos); sfx('pass'); ovtCool = 0.7; }
+    } else { posFlash = POS_FLASH; posPulse = 0; G.dbg.overtaken++; }
+    posShown = pos;
+  }
+  function showOvertake(pos) {
+    const e = el.ovt;
+    if (!e) return;
+    e.textContent = '추월! ' + (pos + 1) + '등';
+    e.className = '';
+    void e.offsetWidth;   // restart the CSS pop animation
+    e.className = 'on' + (pos === 0 ? ' top' : '');
+    ovtT = 0.9;
+  }
+  function hideOvertake() { ovtT = 0; if (el.ovt) el.ovt.className = ''; }
+
+  // ---------------------------------------------------------------------------
+  // world particles (pooled, no allocation): sparkles, confetti bursts, smoke puffs
+  // ---------------------------------------------------------------------------
+  const PN = 220, parts = [];
+  for (let i = 0; i < PN; i++) parts.push({ on: false, x: 0, y: 0, h: 0, vx: 0, vy: 0, vh: 0, t: 0, life: 1, col: '#fff', sz: 0.5, g: 60 });
+  let pHead = 0;
+  const CONF_COLS = ['#ff4f9a', '#ffb020', '#3fc8ff', '#6ee05a', '#ffe14d', '#b070ff', '#ffffff'];
+  const SPARK_COLS = ['#ffffff', '#fff27a', '#ffd040', '#9fe8ff'];
+  const BOOM_COLS = ['#ffffff', '#ffe060', '#ff9a20', '#ff5a20'];
+  const SMOKE_COLS = ['rgba(235,235,240,0.8)', 'rgba(190,190,200,0.7)', 'rgba(150,150,160,0.6)'];
+  function spawnP(x, y, h, vx, vy, vh, life, col, sz, g) {
+    const q = parts[pHead]; pHead = (pHead + 1) % PN;
+    q.on = true; q.x = x; q.y = y; q.h = h; q.vx = vx; q.vy = vy; q.vh = vh; q.t = 0; q.life = life; q.col = col; q.sz = sz; q.g = g;
+  }
+  function burst(x, y, h, n, cols, sp, up, life, sz, g) {
+    const R = Math.random;
+    for (let i = 0; i < n; i++) {
+      const an = R() * C.TAU, v = sp * (0.4 + R() * 0.6);
+      spawnP(x, y, h, Math.cos(an) * v, Math.sin(an) * v, up * (0.5 + R() * 0.7), life * (0.7 + R() * 0.5), cols[(R() * cols.length) | 0], sz * (0.7 + R() * 0.6), g);
+    }
+  }
+  // kind: food | box | boom | fizz | rocket | stall; a = kart heading (puffs go out the back)
+  function pfx(kind, x, y, h, a) {
+    h = h || 0;
+    switch (kind) {
+      case 'food': burst(x, y, h + 1, 10, SPARK_COLS, 22, 34, 0.5, 0.45, 70); break;
+      case 'box': burst(x, y, h, 20, CONF_COLS, 34, 42, 0.8, 0.55, 75); break;
+      case 'boom': burst(x, y, h, 18, BOOM_COLS, 40, 30, 0.45, 0.6, 50); burst(x, y, h, 6, SMOKE_COLS, 12, 14, 0.7, 1.0, -6); break;
+      case 'fizz': burst(x, y, h, 8, SMOKE_COLS, 10, 10, 0.5, 0.7, -4); break;
+      case 'rocket': case 'stall': {
+        const c = Math.cos(a || 0), s2 = Math.sin(a || 0), n = kind === 'rocket' ? 14 : 10;
+        for (let i = 0; i < n; i++) {
+          const R = Math.random, side = (R() - 0.5) * 6;
+          const col = kind === 'rocket' && i < 6 ? BOOM_COLS[(R() * 4) | 0] : SMOKE_COLS[(R() * 3) | 0];
+          spawnP(x - c * 3 - s2 * side, y - s2 * 3 + c * side, 0.5, -c * (20 + R() * 30) + (R() - 0.5) * 10, -s2 * (20 + R() * 30) + (R() - 0.5) * 10,
+            8 + R() * 14, 0.5 + R() * 0.4, col, 0.7 + R() * 0.6, -4);
+        }
+        break;
+      }
+    }
+  }
+  G.pfx = pfx;
+  function updateParts(dt) {
+    let n = 0;
+    for (let i = 0; i < PN; i++) {
+      const q = parts[i];
+      if (!q.on) continue;
+      q.t += dt;
+      if (q.t >= q.life) { q.on = false; continue; }
+      n++;
+      q.x += q.vx * dt; q.y += q.vy * dt;
+      q.vh -= q.g * dt; q.h += q.vh * dt;
+      if (q.h < 0) { q.h = 0; q.vh *= -0.35; q.vx *= 0.6; q.vy *= 0.6; }
+      const dr = 1 - 1.5 * dt; q.vx *= dr; q.vy *= dr;
+    }
+    G.dbg.parts = n;
+  }
+  function clearParts() { for (let i = 0; i < PN; i++) parts[i].on = false; }
+  function drawParts() {
+    for (let i = 0; i < PN; i++) {
+      const q = parts[i];
+      if (!q.on) continue;
+      const dx = q.x - camX, dy = q.y - camY;
+      const z = dx * pfx_ + dy * pfy_;
+      if (z < 3 || z > FOG_FAR) continue;
+      const sc = FOCAL / z;
+      const sx = CX + (dx * prx_ + dy * pry_) * sc;
+      if (sx < -4 || sx > W + 4) continue;
+      const sy = HOR + CAM_H * sc - q.h * sc;
+      const sz = Math.max(1, Math.min(4, Math.round(q.sz * sc)));
+      const fade = 1 - q.t / q.life;
+      ctx.globalAlpha = fade < 0.3 ? fade / 0.3 : 1;
+      ctx.fillStyle = q.col;
+      ctx.fillRect(Math.round(sx - sz / 2), Math.round(sy - sz / 2), sz, sz);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // finish confetti (screen space, ~2 s, skipped in calm mode)
+  const CONF_N = 90, conf = [];
+  for (let i = 0; i < CONF_N; i++) conf.push({ x: 0, y: 0, vx: 0, vy: 0, c: '#fff', w: 2, h: 1, ph: 0 });
+  const CONF_T = 2.4;
+  function startConfetti() {
+    if (calm) return;
+    const R = Math.random;
+    for (let i = 0; i < CONF_N; i++) {
+      const q = conf[i];
+      q.x = R() * W; q.y = -R() * 110 - 4; q.vx = (R() - 0.5) * 30; q.vy = 70 + R() * 60;
+      q.c = CONF_COLS[(R() * CONF_COLS.length) | 0]; q.w = R() < 0.5 ? 2 : 3; q.h = R() < 0.5 ? 1 : 2; q.ph = R() * 6.28;
+    }
+    confT = CONF_T; G.dbg.confetti++;
+  }
+  function drawConfetti() {
+    if (!(confT > 0)) return;
+    ctx.globalAlpha = confT < 0.5 ? confT / 0.5 : 1;
+    const t = G.time;
+    for (let i = 0; i < CONF_N; i++) {
+      const q = conf[i];
+      q.y += q.vy * DT; q.x += (q.vx + Math.sin(t * 5 + q.ph) * 18) * DT;
+      if (q.y < -2 || q.y > H) continue;
+      const flip = Math.sin(t * 9 + q.ph) > 0;   // tumbling: the strip turns edge-on and back
+      ctx.fillStyle = q.c;
+      ctx.fillRect(Math.round(q.x), Math.round(q.y), flip ? q.w : 1, flip ? q.h : q.w);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // map title banner (DOM, so Korean renders crisply) shown during the countdown
   function showMapBanner(id, surprise) {
     const b = el.mapBanner;
@@ -1011,6 +1208,8 @@ window.PK = window.PK || {};
     G.raceTime = 0;
     attractT = 0; finT = 0; newRecord = false; newLapRecord = false;
     toastT = 0; bannerT = 0; shakeT = 0;
+    posShown = -1; posCand = -1; posCandT = 0; posPulse = 0; posFlash = 0; ovtCool = 0; hideOvertake();
+    speedBurst = 0; lastBoostT = 0; confT = 0; clearParts();
     const p = G.player;
     camA = p.a;
     camX = p.x - Math.cos(camA) * C.CAM_DIST; camY = p.y - Math.sin(camA) * C.CAM_DIST;
@@ -1071,6 +1270,7 @@ window.PK = window.PK || {};
   function playerFinish(k) {
     G.state = 'finished'; finT = 0;
     sfx('finish');
+    startConfetti(); hideOvertake();
     banner('FINISH!', '#ffffff');
     const bl = k.lapTimes.length ? Math.min.apply(null, k.lapTimes) : 0;
     if (!(best.total > 0) || k.finishTime < best.total) { best.total = k.finishTime; newRecord = true; }
@@ -1133,6 +1333,7 @@ window.PK = window.PK || {};
     p.finished = true; p.finishTime = G.raceTime;
     G.state = 'finished'; finT = 0; newRecord = false; newLapRecord = false;
     sfx('finish');
+    startConfetti(); hideOvertake();
     banner('FINISH!', '#ffffff');
     bankCoins();
     if (!testMode) rollGhostReward(p);
@@ -1428,7 +1629,7 @@ window.PK = window.PK || {};
     const race = G.state === 'race';
     // shop item: C key / touch button, rising edge, once per race
     const ib = !!(keys.KeyC || touch.item);
-    if (race && ib && !itemPrev) useRaceItem();
+    if (race && ib && !itemPrev) pressItem();
     itemPrev = ib;
     for (let i = 0; i < ks.length; i++) {
       const k = ks[i];
@@ -1454,24 +1655,40 @@ window.PK = window.PK || {};
     if (st === 'paused') return;     // frozen: no simulation, race timer stopped
     if (goT > 0) goT -= dt;
     if (surpriseT > 0) surpriseT -= dt;
+    if (posPulse > 0) posPulse -= dt;
+    if (posFlash > 0) posFlash -= dt;
+    if (ovtCool > 0) ovtCool -= dt;
+    if (ovtT > 0) { ovtT -= dt; if (ovtT <= 0) hideOvertake(); }
+    if (speedBurst > 0) speedBurst -= dt;
+    if (confT > 0) confT -= dt;
+    updateParts(dt);
     if (mapBannerT > 0) { mapBannerT -= dt; if (mapBannerT <= 0) hideMapBanner(); }
     if (st === 'title' || st === 'select' || st === 'maps' || st === 'shop' || st === 'dex' || st === 'ach' || st === 'rank' || st === 'online' || st === 'ctest' || st === 'mtest') {
       simulate(dt);
       attractT += dt;
       if (attractT > ATTRACT_RESET) setupRace(randomKart(), true, raceMap);
     } else if (st === 'countdown') {
+      if (cdGas()) { if (rsFrom < 0) rsFrom = cdT; } else rsFrom = -1;
+      refreshTb();
       cdT -= dt;
       const n = Math.ceil(cdT);
       if (n < lastCd && n >= 1) { lastCd = n; sfx('beep'); }
       if (cdT <= 0) {
         G.state = 'race'; goT = 0.9; sfx('go');
-        if (raceItem && ITEMS()[raceItem].auto) useRaceItem();   // 로켓 스타트 fires at GO
+        rocketStart();
+        // shop 로켓 스타트 fires at GO: a guaranteed rocket start (cancels a too-early stall)
+        if (raceItem && ITEMS()[raceItem].auto && useRaceItem() && G.player) G.player._stallT = 0;
       }
     } else if (st === 'race' || st === 'finished') {
       G.raceTime += dt;
       if (st === 'finished') finT += dt;
       simulate(dt);
-      if (st === 'race') updateSale(dt);
+      if (st === 'race') { updateSale(dt); trackPos(dt); refreshTb(); }
+      const pl = G.player;
+      if (pl && st === 'race') {
+        if ((pl.boostT || 0) > lastBoostT + 0.3) { speedBurst = 0.35; boostKick(0.22); }   // a fresh boost: speed-line burst + kick
+        lastBoostT = pl.boostT || 0;
+      }
     }
     // camera follow: track the movement direction (not the drift-rotated facing), soft dead-zone,
     // gentle follow rate and a yaw-rate cap so drifts and bumps don't swing the view
@@ -1490,6 +1707,16 @@ window.PK = window.PK || {};
       camX = p.x - Math.cos(camA) * C.CAM_DIST;
       camY = p.y - Math.sin(camA) * C.CAM_DIST;
     }
+  }
+
+  // touch '아이템' button: dimmed when there is nothing to use
+  function refreshTb() {
+    if (!el.tbItem) return;
+    const p = G.player;
+    const has = !!(p && !G.online && (p.boxItem || p.boxRoll > 0)) || !!(raceItem && !ITEMS()[raceItem].auto && !itemUsed);
+    if (has === tbHas) return;
+    tbHas = has;
+    el.tbItem.classList.toggle('used', !has);
   }
 
   // ---------------------------------------------------------------------------
@@ -1536,15 +1763,15 @@ window.PK = window.PK || {};
   const pool = [], vis = [];
   function getRec(i) { let r = pool[i]; if (!r) { r = pool[i] = { z: 0, sx: 0, gy: 0, s: 0, spr: null, w: 0, h: 0, kart: null }; } return r; }
   const byDepth = (a, b) => b.z - a.z;
-  let pfx = 1, pfy = 0, prx = 0, pry = 1;
+  let pfx_ = 1, pfy_ = 0, prx_ = 0, pry_ = 1;
 
   // project one world object; returns true if added
   function addBill(n, x, y, h, spr, w, kart) {
     const dx = x - camX, dy = y - camY;
-    const z = dx * pfx + dy * pfy;
+    const z = dx * pfx_ + dy * pfy_;
     if (z < 3 || z > FOG_FAR) return n;
     const s = FOCAL / z;
-    const sx = CX + (dx * prx + dy * pry) * s;
+    const sx = CX + (dx * prx_ + dy * pry_) * s;
     const sw = w * s;
     if (sx + sw < 0 || sx - sw > W) return n;
     const r = getRec(n);
@@ -1555,7 +1782,7 @@ window.PK = window.PK || {};
 
   function drawBillboards() {
     const T = PK.Track;
-    pfx = Math.cos(camA); pfy = Math.sin(camA); prx = -pfy; pry = pfx;
+    pfx_ = Math.cos(camA); pfy_ = Math.sin(camA); prx_ = -pfy_; pry_ = pfx_;
     let n = 0;
     const props = T.props || [];
     for (let i = 0; i < props.length; i++) { const p = props[i]; if (p.spr) n = addBill(n, p.x, p.y, 0, p.spr, p.w, null); }
@@ -1595,21 +1822,56 @@ window.PK = window.PK || {};
     if (spr) {
       const sh = sw * spr.height / spr.width;
       const bottom = r.gy - (k.hop || 0) * s;
-      ctx.drawImage(spr, Math.round(r.sx - sw / 2), Math.round(bottom - sh), Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)));
+      // smooth turning: besides the 3 lean frames, the sprite rolls into the turn, shears sideways
+      // in drifts and (for karts heading away from the camera's direction) narrows a little, so the
+      // kart turns gradually instead of snapping between frames
+      const tgt = kartTurn(k);
+      k._turnVis = (k._turnVis || 0) + (tgt - (k._turnVis || 0)) * 0.18;
+      let t = k._turnVis, roll = t * 0.11, shear = t * (k.drift ? 0.22 : 0.1);
+      let sx = 1 - Math.min(0.22, Math.abs(t) * (k.isPlayer ? 0.06 : 0.2)), lift = 0;
+      // spun out (banana, missile, melon…): a full 360° turn on the spot — the sprite narrows,
+      // flips (its back side shown mirrored) and widens again, bouncing a little
+      if (k.fx && k.fx.spin > 0) {
+        const c = Math.cos(k.spinA || 0);
+        sx = Math.sign(c || 1) * Math.max(0.12, Math.abs(c));
+        roll = Math.sin(k.spinA || 0) * 0.08; shear = 0;
+        lift = Math.abs(Math.sin((k.spinA || 0) * 2)) * sw * 0.06;
+      }
+      ctx.save();
+      ctx.translate(Math.round(r.sx), Math.round(bottom - lift));
+      ctx.rotate(roll);
+      ctx.transform(1, 0, -shear, 1, 0, 0);
+      ctx.scale(sx, 1);
+      ctx.drawImage(spr, -Math.round(sw / 2), -Math.round(sh), Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)));
+      ctx.restore();
     }
     PK.Karts.drawFx(ctx, k, r.sx, r.gy, sw);
   }
+  // how much a kart looks turned (-1 left .. 1 right): the player's steering / drift, the AI's
+  // heading relative to the camera
+  function kartTurn(k) {
+    if (k.fx && k.fx.spin > 0) return 0;
+    if (k.isPlayer) return U.clamp((k.steerIn || 0) + (k.drift ? (k.driftDir || 0) * 0.6 : 0), -1, 1);
+    return U.clamp(U.angDiff(camA, k.a) * 1.4 + (k.drift ? (k.driftDir || 0) * 0.5 : 0), -1, 1);
+  }
 
+  // a fresh boost / rocket start: a short, light screen shake (none in calm mode)
+  function boostKick(t) {
+    if (calm || G.attract) return;
+    shakeT = Math.max(shakeT, t); shakeMag = Math.max(1, shakeMag);
+  }
   function drawSpeedLines() {
     const p = G.player;
-    if (calm || !p || !(p.boostT > 0) || G.state === 'countdown') return;
-    // a few short, faint streaks at the screen edges (boost only)
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    for (let i = 0; i < 4; i++) {
+    if (!p || !(p.boostT > 0) || G.state === 'countdown') return;
+    // a few short, faint streaks at the screen edges (boost only); a fresh boost bursts more,
+    // longer streaks reaching further in for a moment. Calm mode keeps the light version only.
+    const br = speedBurst > 0 && !calm, n = br ? 14 : 4;
+    ctx.fillStyle = br ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.45)';
+    for (let i = 0; i < n; i++) {
       const left = i & 1;
-      const y = HOR + 20 + ((Math.random() * (H - HOR - 30)) | 0);
-      const len = 6 + ((Math.random() * 12) | 0);
-      const x = left ? ((Math.random() * 18) | 0) : W - len - ((Math.random() * 18) | 0);
+      const y = (br ? HOR - 10 : HOR + 20) + ((Math.random() * (H - HOR - (br ? 0 : 30))) | 0);
+      const len = (br ? 14 : 6) + ((Math.random() * (br ? 26 : 12)) | 0);
+      const x = left ? ((Math.random() * (br ? 40 : 18)) | 0) : W - len - ((Math.random() * (br ? 40 : 18)) | 0);
       ctx.fillRect(x, y, len, 1);
     }
   }
@@ -1736,6 +1998,7 @@ window.PK = window.PK || {};
       ctx.save();
       if (ox || oy) ctx.translate(ox, oy);
       drawBillboards();
+      drawParts();
       ctx.restore();
     }
     const fx = PK.Track.fx;
@@ -1747,6 +2010,7 @@ window.PK = window.PK || {};
     drawSpeedLines();
     const st = G.state === 'paused' ? pauseFrom : G.state;
     if (st === 'countdown' || st === 'race' || st === 'finished') drawHUD(st);
+    drawConfetti();
   }
 
   // rooftop at dusk: warm sunset glow from the top, soft violet corners (one precomputed layer)
@@ -1853,8 +2117,12 @@ window.PK = window.PK || {};
     if (pos >= 0) {
       const ps = ORD[pos] || (pos + 1) + 'TH';
       const pr = W - 28;   // leaves the top-right corner to the ⏸ button
-      textR(ps.slice(0, 1), pr - textW(ps.slice(1), 2) - 2, 4, 4, POSCOL[pos] || '#fff');
-      textR(ps.slice(1), pr, 4, 2, POSCOL[pos] || '#fff');
+      // overtake: the number pops bigger and hops; overtaken: it turns red for a moment
+      let pc = POSCOL[pos] || '#fff', big = 4, oy = 0;
+      if (posFlash > 0) pc = '#ff5050';
+      if (posPulse > 0) { const u = posPulse / POS_PULSE; oy = -Math.round(Math.sin(u * Math.PI) * 3); if (u > 0.35) big = 5; pc = u > 0.6 ? '#ffffff' : pc; }
+      textR(ps.slice(0, 1), pr - textW(ps.slice(1), 2) - 2, Math.max(0, 4 + oy - (big - 4) * 2), big, pc);
+      textR(ps.slice(1), pr, 4, 2, pc);
     }
 
     // speed + booster gauge
@@ -1910,6 +2178,24 @@ window.PK = window.PK || {};
       if (!coarse) text(itemUsed ? '-' : IT.auto ? 'GO' : 'C', ix + is + 3, iy + is - 5, 1, itemUsed ? '#776a8a' : '#9fe8ff');
     }
 
+    // ❓ item-box slot (left, under the food counter): roulette while rolling, then the item
+    if (false && !G.online && PK.Skills.BOX) {   // 랜덤 박스 슬롯 숨김
+      const bs = 18, bx = 4, by = 42, BX = PK.Skills.BOX, ids = PK.Skills.BOX_IDS;
+      const rolling = p.boxRoll > 0, has = p.boxItem && !rolling;
+      box(bx - 1, by - 1, bs + 2, bs + 2, rolling ? ((((t * 16) | 0) & 1) ? '#ff4f9a' : '#3fc8ff') : has ? (blink ? '#ffcc00' : '#b06a10') : '#1a1028');
+      ctx.fillStyle = '#120c1c'; ctx.fillRect(bx, by, bs, bs);
+      if (rolling) {
+        const ic = BX[ids[(((p.boxRoll * p.boxRoll) * 40) | 0) % ids.length]].icon;   // spins fast, slows down
+        if (ic) ctx.drawImage(ic, bx + 1, by + 1, bs - 2, bs - 2);
+      } else if (has) {
+        const ic = BX[p.boxItem] && BX[p.boxItem].icon;
+        if (ic) ctx.drawImage(ic, bx + 1, by + 1, bs - 2, bs - 2);
+        if (!coarse) text('C', bx + bs + 3, by + bs - 5, 1, blink ? '#fff' : '#ffcc00');
+      } else textC('?', bx + bs / 2, by + 4, 2, '#3a2c52', false);
+      // homing basket closing in
+      if (st === 'race' && PK.Skills.incoming && PK.Skills.incoming(p) && blink) textC('! INCOMING !', CX, 78, 2, '#ff4040');
+    }
+
     // minimap (desktop: bottom-right 60x60; touch: top-right under the position, 48x48)
     // the maze map hides it on purpose: find the way yourself
     if (T.mini && !(T.def && (T.def.noMinimap || T.def.maze))) {
@@ -1954,19 +2240,76 @@ window.PK = window.PK || {};
     if (st === 'finished' && finT > 1.2 && !G.online) drawResults(stand, blink);   // online: js/net.js panel
   }
 
-  function drawResults(stand, blink) {
-    const px = 46, py = 22, pw = 228, ph = 136;
+  // 🏁 podium: the top 3 standing on gold / silver / bronze blocks (1st in the middle, higher),
+  // rising in one after the other; the winner hops, a few twinkles around it
+  const POD = [
+    { place: 1, x: 40, w: 36, h: 32, col: '#ffd800', dk: '#b08a00', sw: 32, delay: 0.5 },
+    { place: 2, x: 8, w: 32, h: 22, col: '#dfe3f0', dk: '#8a90a8', sw: 28, delay: 0.25 },
+    { place: 3, x: 76, w: 32, h: 15, col: '#e8964a', dk: '#9a5a22', sw: 28, delay: 0 },
+  ];
+  function drawPodium(stand) {
+    const px = 4, py = 22, pw = 108, ph = 136, base = py + ph - 24, t = G.time, u0 = finT - 1.2;
     ctx.fillStyle = '#000'; ctx.fillRect(px - 2, py - 2, pw + 4, ph + 4);
     ctx.fillStyle = 'rgba(30,20,48,0.94)'; ctx.fillRect(px, py, pw, ph);
     ctx.fillStyle = '#ff8800'; ctx.fillRect(px, py, pw, 2); ctx.fillRect(px, py + ph - 2, pw, 2);
-    textC('RESULTS', CX, py + 6, 2, '#ffcc00');
+    textC('TOP 3', px + pw / 2, py + 6, 2, '#ffcc00');
+    // spotlight cone behind the winner
+    ctx.fillStyle = 'rgba(255,240,180,0.07)';
+    for (let i = 0; i < 6; i++) ctx.fillRect(px + 58 - 6 - i * 3, py + 18 + i * 12, 12 + i * 6, 12);
+    for (let n = 0; n < POD.length; n++) {
+      const d = POD[n], k = stand[d.place - 1];
+      if (!k) continue;
+      const bx = px + d.x - 4, top = base - d.h;
+      // block
+      ctx.fillStyle = '#000'; ctx.fillRect(bx - 1, top - 1, d.w + 2, d.h + 2);
+      ctx.fillStyle = d.col; ctx.fillRect(bx, top, d.w, d.h);
+      ctx.fillStyle = d.dk; ctx.fillRect(bx, top + d.h - 3, d.w, 3); ctx.fillRect(bx + d.w - 2, top, 2, d.h);
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.fillRect(bx, top, d.w, 1);
+      textC(String(d.place), bx + d.w / 2, top + Math.min(4, d.h - 10), 2, '#2a1a08', false);
+      // kart sprite rising onto it
+      const u = U.clamp((u0 - d.delay) / 0.35, 0, 1), e = 1 - (1 - u) * (1 - u);
+      let spr = null;
+      try { spr = PK.Karts.sprite(k.defIndex, k.isPlayer); } catch (er) { spr = null; }
+      if (spr && u > 0) {
+        const sw = d.sw, sh = Math.round(sw * spr.height / spr.width);
+        const hop = d.place === 1 && u >= 1 ? Math.round(Math.abs(Math.sin(t * 4)) * 3) : 0;
+        const sy = Math.round(top - sh * e - hop);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(bx - 6, py + 16, d.w + 12, top - py - 16); ctx.clip();   // rises from behind the block
+        ctx.drawImage(spr, Math.round(bx + (d.w - sw) / 2), sy, sw, sh);
+        ctx.restore();
+        if (d.place === 1 && u >= 1) {
+          ctx.fillStyle = '#ffffff';
+          for (let i = 0; i < 4; i++) {
+            if (((t * 6 + i * 1.7) | 0) % 3) continue;
+            const tx = bx + 2 + ((i * 23 + ((t * 2) | 0) * 7) % (d.w - 4)), ty = sy - 2 + ((i * 13) % 20);
+            ctx.fillRect(tx, ty, 1, 3); ctx.fillRect(tx - 1, ty + 1, 3, 1);
+          }
+        }
+      }
+      // name + time under the podium
+      const nm = k.isPlayer ? 'YOU' : String(k.name || k.def.name).slice(0, 7);
+      textC(nm, bx + d.w / 2, base + 4, 1, k.isPlayer ? '#ffcc00' : '#ffffff');
+      textC(k.finished ? fmt(k.finishTime).replace(/^0:/, '') : '--.--', bx + d.w / 2, base + 12, 1, '#a898c8', false);
+    }
+    G.dbg.podium++;
+  }
+
+  function drawResults(stand, blink) {
+    // podium on the left, the table on the right
+    drawPodium(stand);
+    const px = 116, py = 22, pw = 200, ph = 136, PCX = px + pw / 2;
+    ctx.fillStyle = '#000'; ctx.fillRect(px - 2, py - 2, pw + 4, ph + 4);
+    ctx.fillStyle = 'rgba(30,20,48,0.94)'; ctx.fillRect(px, py, pw, ph);
+    ctx.fillStyle = '#ff8800'; ctx.fillRect(px, py, pw, 2); ctx.fillRect(px, py + ph - 2, pw, 2);
+    textC('RESULTS', PCX, py + 6, 2, '#ffcc00');
     // coins earned this race (left) / wallet (right)
     const fi = PK.Skills.foodIcon && PK.Skills.foodIcon(0);
     if (fi) ctx.drawImage(fi, px + 6, py + 5, 9, 9);
     text('+' + foodRace + (testMode ? ' TEST' : ''), px + 17, py + 7, 1, '#ffe14d', false);
     textR('COIN ' + wallet(), px + pw - 6, py + 7, 1, '#ffe14d', false);
-    textC((raceMap === GHOST_MAP ? '??? ' : 'MAP ' + (raceMap + 1) + ' ') + (PK.Track.nameEn || ''), CX, py + 15, 1, raceMap === GHOST_MAP ? '#c8a0ff' : '#a898c8', false);
-    const c0 = px + 8, cChip = px + 20, cName = px + 32, cTime = px + 64, cLap = px + 120, cTag = px + 176;
+    textC((raceMap === GHOST_MAP ? '??? ' : 'MAP ' + (raceMap + 1) + ' ') + (PK.Track.nameEn || ''), PCX, py + 15, 1, raceMap === GHOST_MAP ? '#c8a0ff' : '#a898c8', false);
+    const c0 = px + 6, cChip = px + 15, cName = px + 26, cTime = px + 58, cLap = px + 102, cTag = px + 172;
     const hy = py + 25;
     text('TIME', cTime, hy, 1, '#a898c8', false);
     text('BEST LAP', cLap, hy, 1, '#a898c8', false);
@@ -1984,12 +2327,12 @@ window.PK = window.PK || {};
     }
     const y = hy + 9 + stand.length * 12 + 2;
     if (newRecord || newLapRecord) {
-      textC(newRecord ? 'NEW RECORD!' : 'NEW LAP RECORD!', CX, y, 2, blink ? '#ff8800' : '#ffe14d');
+      textC(newRecord ? 'NEW RECORD!' : 'NEW LAP RECORD!', PCX, y, 2, blink ? '#ff8800' : '#ffe14d');
     }
-    if (ghostReward === 'got') textC('GHOST KART UNLOCKED!', CX, y + 12, 1, blink ? '#c8a0ff' : '#ffffff');
-    else if (ghostReward === 'miss') textC('THE GHOST GOT AWAY...', CX, y + 12, 1, '#a898c8');
-    else if (ghostReward === 'glitch') textC('GLITCH KART UNLOCKED!', CX, y + 12, 1, blink ? '#00e8b8' : '#ff40d0');
-    if (((G.time * 2) | 0) & 1) textC(testMode ? 'ENTER: CHAR TEST  R: RETRY  ESC: MENU' : 'ENTER: NEXT MAP  R: RETRY  ESC: MENU', CX, py + ph - 10, 1, '#fff');
+    if (ghostReward === 'got') textC('GHOST KART UNLOCKED!', PCX, y + 12, 1, blink ? '#c8a0ff' : '#ffffff');
+    else if (ghostReward === 'miss') textC('THE GHOST GOT AWAY...', PCX, y + 12, 1, '#a898c8');
+    else if (ghostReward === 'glitch') textC('GLITCH KART UNLOCKED!', PCX, y + 12, 1, blink ? '#00e8b8' : '#ff40d0');
+    if (((G.time * 2) | 0) & 1) textC(testMode ? 'ENTER: CHAR TEST  R: RETRY  ESC: MENU' : 'ENTER: NEXT MAP  R: RETRY  ESC: MENU', PCX, py + ph - 10, 1, '#fff');
   }
 
   // ---------------------------------------------------------------------------
@@ -2056,6 +2399,7 @@ window.PK = window.PK || {};
     // screen shake is visual, so trigger it even without audio
     // (hits only, 1 px; none for bumps or in calm mode)
     if (!G.attract && !calm && name === 'hit') { shakeT = 0.2; shakeMag = 1; }
+    if (!G.attract && !calm && name === 'wall') { shakeT = 0.25; shakeMag = 2; }
     if (!G.attract && name === 'glitch') glitchT = 0.35;   // teleport / glitch world: brief screen glitch
     if (!ac || G.attract || G.muted) return;
     const now = ac.currentTime;
@@ -2070,12 +2414,20 @@ window.PK = window.PK || {};
         case 'skill': tone('square', 520, 520, 0.06, 0.12); tone('square', 780, 780, 0.06, 0.12, 0.06); tone('square', 1040, 1040, 0.1, 0.12, 0.12); break;
         case 'hit': noise(0.35, 0.35, 1200); tone('sawtooth', 320, 50, 0.4, 0.18); break;
         case 'bump': tone('triangle', 140, 50, 0.12, 0.3); noise(0.08, 0.15, 600); break;
+        // tyre squeal for a spin-out: a high sliding screech over hiss
+        case 'skid': tone('sawtooth', 1500, 820, 0.55, 0.07); tone('square', 1180, 700, 0.5, 0.04, 0.03); noise(0.6, 0.16, 4200); break;
+        // hard wall hit: a low thud + crunch
+        case 'wall': tone('sine', 110, 38, 0.28, 0.4); tone('triangle', 220, 60, 0.16, 0.22); noise(0.22, 0.3, 900); break;
         case 'lap': [660, 880, 1100].forEach((f, i) => tone('square', f, f, 0.1, 0.14, i * 0.09)); break;
         case 'finish': [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone('square', f, f, i === 5 ? 0.5 : 0.12, 0.15, i * 0.12)); break;
         case 'spooky': tone('sine', 620, 140, 1.3, 0.22); tone('triangle', 930, 210, 1.1, 0.1, 0.12); tone('square', 92, 60, 1.2, 0.06); noise(0.9, 0.12, 700); break;
         case 'gauge': tone('square', 1200, 1200, 0.05, 0.1); tone('square', 1600, 1600, 0.08, 0.1, 0.06); break;
         case 'glitch': for (let i = 0; i < 7; i++) { const f = 200 + Math.random() * 1800; tone(i & 1 ? 'square' : 'sawtooth', f, f * (0.5 + Math.random()), 0.05, 0.1, i * 0.045); } noise(0.3, 0.12, 4000, 0.05); break;
         case 'sale': [784, 988, 1175, 1568, 1175, 1568].forEach((f, i) => tone('square', f, f, i === 5 ? 0.3 : 0.08, 0.13, i * 0.09)); break;
+        case 'box': [880, 1175, 1480].forEach((f, i) => tone('square', f, f, 0.05, 0.1, i * 0.04)); noise(0.12, 0.08, 3000); break;
+        case 'missile': tone('sawtooth', 260, 900, 0.35, 0.12); noise(0.35, 0.12, 2500); break;
+        case 'stall': noise(0.45, 0.2, 900); tone('sawtooth', 110, 70, 0.4, 0.12); break;
+        case 'pass': tone('square', 988, 988, 0.05, 0.1); tone('square', 1480, 1480, 0.09, 0.1, 0.05); break;
         default: tone('square', 700, 700, 0.05, 0.08);
       }
     } catch (e) { /* ignore */ }
@@ -2112,6 +2464,7 @@ window.PK = window.PK || {};
     raceItem = equipped(); itemUsed = false; itemPrev = true;
     if (el.tbItem) el.tbItem.classList.remove('used');
     foodRace = 0; coinsBanked = false; saleAt = -1; saleDone = false;
+    rsFrom = -1;
     G.online = true;
     G.state = 'countdown';
     showOnly('race');
