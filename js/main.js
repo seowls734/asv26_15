@@ -1406,7 +1406,6 @@ window.PK = window.PK || {};
       else if (c === 'KeyD') { uiBeep(0); goDex(); }
       else if (c === 'KeyH') { uiBeep(0); goAch(); }
       else if (c === 'KeyK') { uiBeep(0); goRank(); }
-      else if (c === 'KeyT') { uiBeep(0); goTest(); }
       else if (c === 'KeyV') toggleCalm();
     } else if (st === 'rank') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
