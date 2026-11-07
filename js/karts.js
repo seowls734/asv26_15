@@ -884,6 +884,7 @@ window.PK = window.PK || {};
     if (k._obsT > 0) k._obsT -= dt;
     if (k._obsAge < 99) k._obsAge += dt;
     if (k._obsPass > 0) k._obsPass -= dt;
+    k._touchAge = (k._touchAge || 0) + dt;
 
     // ---- surface checks ----
     let inPuddle = false;
@@ -1202,6 +1203,22 @@ window.PK = window.PK || {};
         const d = Math.sqrt(dsq);
         if (d < 1e-4) { nx = -Math.cos(k.ma); ny = -Math.sin(k.ma); } else { nx /= d; ny /= d; }
         k.x = o.x + nx * rr; k.y = o.y + ny * rr;
+        // anti-stuck (player and AI): pressed against the same obstacle (head-on, or squeezed against
+        // the wall) -> after 0.5 s slide round it toward the open road, after 1.3 s slip past it
+        if (k._touchO !== o || k._touchAge > 0.2) { k._touchO = o; k._touchT = 0; }
+        k._touchAge = 0; k._touchT += 1 / 60;
+        if (k._touchT > 0.5) {
+          const T = PK.Track, ta = T && T.TAN ? T.TAN[o.i] || 0 : 0;
+          // the way out, sideways across the road: toward the centre line, or (obstacle on the centre
+          // line) round the side the kart is already on. +lat = (-sin, cos) of the track direction.
+          const toPlus = Math.abs(o.lat || 0) < 4 ? (k.lat || 0) >= (o.lat || 0) : (o.lat || 0) < 0;
+          const wx = -Math.sin(ta) * (toPlus ? 1 : -1), wy = Math.cos(ta) * (toPlus ? 1 : -1);
+          let tx = -ny, ty = nx;
+          if (tx * wx + ty * wy < 0) { tx = -tx; ty = -ty; }
+          const sv = 40 / 60;
+          k.x += tx * sv; k.y += ty * sv;
+        }
+        if (k._touchT > 1.3) { k._obsPass = 0.8; k._obsLast = o; k._touchT = 0; continue; }
         const ovx = o.vx || 0, ovy = o.vy || 0;
         const vx = Math.cos(k.ma) * k.v - ovx, vy = Math.sin(k.ma) * k.v - ovy;
         const vn = vx * nx + vy * ny;
