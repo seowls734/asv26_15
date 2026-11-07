@@ -115,7 +115,7 @@ window.PK = window.PK || {};
     } catch (err) { return false; }
   }
   const tag = (a, id) => a.filter((e) => e && typeof e.time === 'number')
-    .map((e) => ({ name: clean(e.name) || '???', time: e.time, kart: e.kart | 0, at: e.at | 0, map: id }));
+    .map((e) => ({ name: clean(e.name) || '???', time: e.time, kart: e.kart | 0, at: Number(e.at) || 0, map: id }));
   async function getJson(u) { const r = await fetch(u); if (!r.ok) throw new Error(r.status); return (await r.json()) || {}; }
   const vals = (o) => Object.keys(o).map((k) => o[k]);
   // raw records of one map, fastest first: -> { online, list: [{ name, time, kart, at, map }] }
