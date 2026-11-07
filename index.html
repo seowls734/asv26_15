@@ -109,6 +109,16 @@
   }
   .tb.down { background: rgba(255, 190, 0, .65); color: #1a0d00; text-shadow: none; }
   .tb.big { font-size: 1.6em; }
+  /* ---------- intro cutscene (first launch) ---------- */
+  #intro { background: #000; padding: 0; z-index: 5; cursor: pointer; }
+  #introCv { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+  #introSkip { position: absolute; top: 3%; right: 2%; font-size: .75em; padding: .2em .6em; margin: 0; }
+  #introBox { position: absolute; left: 3%; right: 3%; bottom: 2%; margin: 0; min-height: 22%; padding: .4em .9em; background: rgba(42, 31, 61, .94); }
+  #introBox.narr { background: rgba(10, 6, 20, .9); }
+  #introName { color: #ffcc00; font-size: .9em; margin-bottom: .2em; text-shadow: .1em .1em 0 #000; }
+  #introText { font-size: 1.05em; line-height: 1.4; color: #fff; text-shadow: .08em .08em 0 #000; }
+  #introBox.narr #introText { color: #d8d0ea; font-style: italic; }
+  #introNext { position: absolute; right: .7em; bottom: .3em; color: #ffcc00; font-size: .8em; }
   /* ---------- title ---------- */
   .tcols { display: flex; align-items: center; justify-content: center; gap: 1em; max-width: 100%; }
   .tmain { display: flex; flex-direction: column; align-items: center; }
@@ -248,6 +258,16 @@
   <canvas id="game" width="320" height="180"></canvas>
 
   <!-- 타이틀 -->
+  <div id="intro" class="ov">
+    <canvas id="introCv" width="320" height="180"></canvas>
+    <button id="introSkip" class="btn alt">건너뛰기 (Esc)</button>
+    <div id="introBox" class="panel">
+      <div id="introName"></div>
+      <div id="introText"></div>
+      <div id="introNext" class="blink">▼ Enter / 터치</div>
+    </div>
+  </div>
+
   <div id="title" class="ov on">
     <div class="tcols">
       <div class="tmain">
@@ -266,6 +286,7 @@
         </div>
         <div class="row trow">
           <button id="btnEasy" class="btn alt">🎮 쉬운 조작: 켬</button>
+          <button id="btnIntro" class="btn alt">🎬 오프닝 다시 보기</button>
           <button id="btnCalm" class="btn alt">🌙 화면 흔들림 줄이기: 끔</button>
         </div>
         <div id="best">최고 기록: 없음</div>
@@ -428,6 +449,7 @@
 <script src="js/rank.js"></script>
 <!-- online 2P: PeerJS (WebRTC + free PeerJS cloud signalling); async so a slow/blocked CDN never delays the game -->
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<script src="js/intro.js"></script>
 <script src="js/main.js"></script>
 <script src="js/net.js"></script>
 <script src="js/joystick.js"></script>

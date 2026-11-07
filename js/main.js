@@ -362,6 +362,7 @@ window.PK = window.PK || {};
     resize();
     window.addEventListener('resize', resize);
     goTitle();
+    if (PK.Intro && !PK.Intro.seen()) playIntro();   // 🎬 opening cutscene on the very first launch
     requestAnimationFrame(loop);
   }
 
@@ -381,6 +382,14 @@ window.PK = window.PK || {};
   function show(e, on) { if (e && e.classList) e.classList.toggle('on', !!on); }
   const RACE_STATES = { countdown: 1, race: 1, finished: 1 };
   // one place that decides which DOM overlay is visible
+  // 🎬 opening cutscene (js/intro.js): home → street → meat corner → start line, then the title.
+  // Plays once on first launch (pk_intro_v2), again from the title's '오프닝 다시 보기'.
+  function playIntro() {
+    if (!PK.Intro) return;
+    G.state = 'intro'; G.attract = true;
+    showOnly('intro');
+    PK.Intro.play('intro', {}, uiBeep, goTitle);
+  }
   function showOnly(which) {
     show(el.title, which === 'title'); show(el.select, which === 'select'); show(el.maps, which === 'maps');
     show(el.pause, which === 'pause'); show(el.shop, which === 'shop'); show(el.dex, which === 'dex'); show(el.ach, which === 'ach'); show(el.rank, which === 'rank');
@@ -1493,6 +1502,7 @@ window.PK = window.PK || {};
     if (PK.Net && PK.Net.key && PK.Net.key(c)) return;   // online 2P lobby / race keys (js/net.js)
     if (c === 'KeyM') { toggleMute(); return; }
     const st = G.state;
+    if (st === 'intro') return;   // PK.Intro handles its own keys
     if (st === 'title') {
       if (isEnter(c)) { uiBeep(1); startGame(); }
       else if (c === 'KeyL') { uiBeep(0); ghostMode = false; goMaps(); }
@@ -1582,6 +1592,7 @@ window.PK = window.PK || {};
     on(el.btnItem, () => { ensureAudio(); cycleItem(); });
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
+    on(document.getElementById('btnIntro'), () => { ensureAudio(); uiBeep(1); playIntro(); });
     on(document.getElementById('btnGhost'), () => { ensureAudio(); uiBeep(1); goGhostMode(); });
     on(el.btnTest, () => { ensureAudio(); uiBeep(1); goTest(); });
     on(el.btnMapTest, () => { ensureAudio(); uiBeep(1); goMapTest(); });
