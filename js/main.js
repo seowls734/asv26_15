@@ -563,7 +563,7 @@ window.PK = window.PK || {};
     show(document.getElementById('modes'), which === 'modes'); show(document.getElementById('settings'), which === 'settings');
     if (which !== 'race' && which !== 'pause') tutShow('');
     if (which === 'pause') musicStop();
-    else if (which !== 'race') musicPlay(-1);   // menus: calm title loop
+    else if (which !== 'race') musicStop();   // menus are quiet: the music only plays during a race
     const racing = which === 'race' || which === 'pause';
     show(el.touch, coarse && which === 'race');
     if (el.tbItem) el.tbItem.style.display = !G.online || (raceItem && !ITEMS()[raceItem].auto) ? '' : 'none';
@@ -936,7 +936,7 @@ window.PK = window.PK || {};
   // musicWant = track that should be playing (null = silence); started once the AudioContext exists
   const M = () => PK.Music;
   let musicWant = null, musicCur = null, musicInit = false;
-  // 🎵 background music: assets/music/velocity_bloom.mp3 (looped) on the menus and the regular maps,
+  // 🎵 background music: assets/music/velocity_bloom.mp3 (looped) during races on the regular maps,
   // routed through the master gain (so M mutes it too). The secret ghost / glitch maps keep their
   // own generated tracks (PK.Music). A new race restarts the song; the last lap plays it a bit faster.
   const BGM_SRC = 'assets/music/velocity_bloom.mp3', BGM_VOL = 0.5;
