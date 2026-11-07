@@ -1188,6 +1188,14 @@ window.PK = window.PK || {};
         text(s, p - Math.floor(textW(s) / 2), 20, H('#ffffff'), 1);
       }
     }
+    // promo danglers: little diamond price cards on strings between the aisle signs
+    for (let k = 0; k < 36; k++) {
+      const p = Math.floor((k + 0.5) * PER / 36) + 9, c = H(['#ffd83a', '#ff5a4a', '#4ab0ff'][k % 3]);
+      rect(p, CEIL + 2, 1, 5 + (k & 1) * 2, H('#8a8070'));
+      const y0 = CEIL + 7 + (k & 1) * 2;
+      for (let r = 0; r < 5; r++) { const w = r < 3 ? r : 4 - r; rect(p - w, y0 + r, w * 2 + 1, 1, c); }
+      set(p, y0 + 2, H('#ffffff'));
+    }
     return finishBg(b, o.fog || '#ece2cd', martHaze(HZ, CEIL));
   }
 
@@ -1250,6 +1258,14 @@ window.PK = window.PK || {};
       const t = x / PER * Math.PI * 2, h = 5 + Math.round(3 * Math.sin(t * 13) + 2 * Math.sin(t * 31 + 2));
       for (let r = HZ - h; r < HZ; r++) { const i = r * PER + x; b.pix[i] = mix(b.pix[i], [246, 252, 255], 0.55 * (r - (HZ - h) + 1) / h); }
     }
+    // big "FROZEN" header boards hung between the snowflake boards
+    for (let k = 0; k < 5; k++) {
+      const p = Math.floor((k + 0.25) * PER / 5);
+      rect(p - 22, CEIL + 2, 1, 3, H('#6e8494')); rect(p + 21, CEIL + 2, 1, 3, H('#6e8494'));
+      rect(p - 25, 17, 50, 9, H('#e8f6ff')); rect(p - 24, 18, 48, 7, H('#2f6fb8'));
+      b.text('FROZEN', p - Math.floor(textW('FROZEN') / 2), 19, H('#ffffff'), 1);
+      for (let x = p - 25; x < p + 25; x += 3) set(x, 26, H('#f4fbff'));
+    }
     return finishBg(b, fogHex, (r) => (r < CEIL ? 0.06 : r < 46 ? 0.2 : 0.2 + 0.8 * ((r - 45) / (HZ - 46))));
   }
 
@@ -1308,6 +1324,13 @@ window.PK = window.PK || {};
         b.text('FRESH', p - 9, top + 9, H('#f4f0d8'), 1);
       }
     }
+    // garlic / chilli braids and hanging scales from the beams
+    for (let x = 12; x < PER; x += 54) {
+      const chilli = (x / 54 | 0) % 2;
+      rect(x, CEIL, 1, 3, H('#3a2a1a'));
+      for (let j = 0; j < 6; j++) { set(x - 1 + (j & 1), CEIL + 3 + j, H(chilli ? '#d8302a' : '#f4ecd8')); set(x + (j & 1), CEIL + 3 + j, H(chilli ? '#a02018' : '#d8ccb0')); }
+    }
+    for (let x = 100; x < PER; x += 230) { rect(x, CEIL, 1, 6, H('#5a5048')); rect(x - 4, CEIL + 6, 9, 1, H('#a8a8a8')); rect(x - 4, CEIL + 7, 1, 2, H('#a8a8a8')); rect(x + 4, CEIL + 7, 1, 2, H('#a8a8a8')); rect(x - 5, CEIL + 9, 3, 1, H('#c8c8c8')); rect(x + 3, CEIL + 9, 3, 1, H('#c8c8c8')); }
     return finishBg(b, fogHex, (r) => (r < CEIL ? 0.05 : r < 47 ? 0.15 : 0.15 + 0.85 * ((r - 46) / (HZ - 47))));
   }
 
@@ -1370,6 +1393,17 @@ window.PK = window.PK || {};
     // parapet wall of the roof deck
     rect(0, HZ - 7, PER, 7, H('#8a7f8a')); rect(0, HZ - 7, PER, 1, H('#c8b8b8'));
     for (let px = 0; px < PER; px += 24) rect(px, HZ - 6, 1, 6, H('#6a6070'));
+    // floodlight masts along the parapet and a rooftop billboard
+    for (let px = 40; px < PER; px += 160) {
+      rect(px, HZ - 22, 1, 15, H('#3a3046')); rect(px - 3, HZ - 24, 7, 2, H('#3a3046')); rect(px - 2, HZ - 22, 5, 1, H('#fff2c0'));
+      for (let r = 1; r < 8; r++) for (let i = -r; i <= r; i++) { const q = (HZ - 21 + r) * PER + ((px + i) % PER + PER) % PER; pix[q] = mix(pix[q], H('#fff2c0'), 0.12); }
+    }
+    for (let k = 0; k < 3; k++) {
+      const p = Math.floor((k + 0.6) * PER / 3);
+      rect(p - 20, HZ - 26, 40, 13, H('#1a1028')); rect(p - 19, HZ - 25, 38, 11, H('#ff8a3a'));
+      b.text('PARK', p - Math.floor(textW('PARK', 2) / 2), HZ - 24, H('#fff6e0'), 2);
+      rect(p - 14, HZ - 13, 1, 6, H('#2e2040')); rect(p + 13, HZ - 13, 1, 6, H('#2e2040'));
+    }
     return finishBg(b, fogHex, (r) => (r < 44 ? 0 : r < HZ - 7 ? 0.12 * (r - 43) / (HZ - 50) : 0.3 + 0.7 * ((r - (HZ - 7)) / 6)));
   }
 
@@ -1606,6 +1640,10 @@ window.PK = window.PK || {};
         const sc = cfg.vary ? 0.88 + c.rnd() * 0.24 : 1;
         const lat = side * (B + 6 + W[r[0]] * sc * 0.3 + 3 + (cfg.vary ? c.rnd() * 6 : 0));
         c.tryAdd(base[0] - Math.sin(t) * lat, base[1] + Math.cos(t) * lat, r[0], r[1], false, sc);
+        if (cfg.back && (i / step | 0) % 2 === 0) {          // a second, deeper row for depth
+          const rb = cfg.back(), lb = lat + side * 34;
+          if (rb) c.tryAdd(base[0] - Math.sin(t) * lb, base[1] + Math.cos(t) * lb, rb[0], rb[1], false, sc);
+        }
       }
     }
     const lo = -40, hi = c.TEX + 40, st = 100;
@@ -1645,8 +1683,9 @@ window.PK = window.PK || {};
         return r < 0.4 ? ['fruit', pick(lib.fruit)] : r < 0.6 ? ['food', pick(lib.foodP)] : r < 0.75 ? ['boxes', pick(lib.boxes)]
           : r < 0.88 ? ['sign', pick(lib.sign)] : ['cart', pick(lib.cart)];
       }
-      if (trackside) return r < 0.56 ? ['shelf', shelfSpr([0, 1, 2, 3, 4])] : r < 0.84 ? ['food', pick(lib.foodG)] : r < 0.92 ? ['cans', pick(lib.cans)] : r < 0.96 ? ['water', lib.water] : ['wet', lib.wet];
+      if (trackside) return r < 0.5 ? ['shelf', shelfSpr([0, 1, 2, 3, 4])] : r < 0.74 ? ['food', pick(lib.foodG)] : r < 0.82 ? ['cans', pick(lib.cans)] : r < 0.87 ? ['water', lib.water] : r < 0.9 ? ['wet', lib.wet] : r < 0.96 ? ['baskets', lib.baskets] : ['balloons', lib.balloons];
       if (r > 0.97) return ['plant', pick(lib.plant)];
+      if (r > 0.93) return [r > 0.95 ? 'balloons' : 'baskets', r > 0.95 ? lib.balloons : lib.baskets];
       return r < 0.4 ? ['shelf', shelfSpr([0, 1, 2, 3, 4])] : r < 0.58 ? ['food', pick(lib.foodG)] : r < 0.7 ? ['cans', pick(lib.cans)]
         : r < 0.8 ? ['boxes', pick(lib.boxes)] : r < 0.9 ? ['sign', pick(lib.sign)] : ['cart', pick(lib.cart)];
     };
@@ -1681,7 +1720,7 @@ window.PK = window.PK || {};
       tryAdd(lo, hi - (s - lo), 'shelf', shelfSpr([0, 1, 2, 3, 4]), true);
     }
     // 4) random fillers across the store floor (infields, margins)
-    for (let tries = 0; tries < 4000 && props.length < 196; tries++) {
+    for (let tries = 0; tries < 4000 && props.length < 226; tries++) {
       const x = 20 + rnd() * 984, y = 20 + rnd() * 984;
       const z = zone(x, y);
       const [kind, spr0] = make(z, x, y, false);
@@ -1692,7 +1731,8 @@ window.PK = window.PK || {};
   function props1(c) {     // 냉동 코너
     const L = c.lib, pick = c.pick, rnd = c.rnd;
     genericProps(c, {
-      max: 190, step: 7, vary: true,
+      max: 230, step: 7, vary: true,
+      back() { const r = rnd(); return r < 0.6 ? ['cooler', pick(L.cooler)] : r < 0.8 ? ['ftrolley', L.ftrolley] : ['icecream', L.icecream]; },
       special(c2) {
         for (let k = 0; k < 4; k++) c2.tryAdd(470 + (k & 1) * 22, 300 + k * 60, 'penguin', L.penguin);
         for (const [x, y] of [[250, 420], [250, 600], [740, 420], [720, 760]]) c2.tryAdd(x, y, 'snowman', L.snowman);
@@ -1701,7 +1741,7 @@ window.PK = window.PK || {};
       side() {
         const r = rnd();
         return r < 0.4 ? ['freezer', pick(L.freezer)] : r < 0.76 ? ['cooler', pick(L.cooler)] : r < 0.86 ? ['ice', L.ice] : r < 0.91 ? ['icecream', L.icecream]
-          : r < 0.95 ? ['wet', L.wet] : ['sign', pick(L.signIce)];
+          : r < 0.94 ? ['wet', L.wet] : r < 0.97 ? ['ftrolley', L.ftrolley] : ['sign', pick(L.signIce)];
       },
       ring() { return ['cooler', pick(L.cooler)]; },
       fill() {
@@ -1714,12 +1754,13 @@ window.PK = window.PK || {};
   function props2(c) {     // 청과 시장
     const L = c.lib, pick = c.pick, rnd = c.rnd;
     genericProps(c, {
-      max: 200, step: 7, vary: true,
+      max: 240, step: 7, vary: true,
+      back() { const r = rnd(); return r < 0.5 ? ['awning', pick(L.awning)] : r < 0.75 ? ['parasol', pick(L.parasol)] : ['cstack', pick(L.cstack)]; },
       special(c2) { for (const [x, y] of [[320, 300], [300, 520], [700, 480], [640, 760], [460, 700]]) c2.tryAdd(x, y, 'bunting', L.bunting); },
       side() {
         const r = rnd();
         return r < 0.34 ? ['awning', pick(L.awning)] : r < 0.58 ? ['food', pick(L.foodP)] : r < 0.72 ? ['crate', pick(L.crate)] : r < 0.8 ? ['cstack', pick(L.cstack)]
-          : r < 0.87 ? ['flowers', pick(L.flowers)] : r < 0.93 ? ['sacks', L.sacks] : ['fruit', pick(L.fruit)];
+          : r < 0.86 ? ['flowers', pick(L.flowers)] : r < 0.9 ? ['sacks', L.sacks] : r < 0.95 ? ['parasol', pick(L.parasol)] : ['fruit', pick(L.fruit)];
       },
       ring() { return rnd() < 0.75 ? ['awning', pick(L.awning)] : ['bunting', L.bunting]; },
       fill() {
@@ -1733,7 +1774,8 @@ window.PK = window.PK || {};
   function props3(c) {     // 옥상 주차장
     const L = c.lib, pick = c.pick, rnd = c.rnd;
     genericProps(c, {
-      max: 185, step: 7,
+      max: 225, step: 7,
+      back() { const r = rnd(); return r < 0.55 ? ['car', pick(L.car)] : r < 0.75 ? ['lamp', L.lamp] : ['charger', L.charger]; },
       special(c2) {
         c2.tryAdd(560, 705, 'gate', L.gate); c2.tryAdd(560, 575, 'corral', L.corral);
         for (const [x, y] of [[380, 400], [620, 420], [620, 160], [300, 700]]) c2.tryAdd(x, y, 'vending', pick(L.vending));
@@ -1741,7 +1783,7 @@ window.PK = window.PK || {};
       side() {
         const r = rnd();
         return r < 0.4 ? ['car', pick(L.car)] : r < 0.53 ? ['lamp', L.lamp] : r < 0.7 ? ['cone', L.cone] : r < 0.84 ? ['jersey', L.jersey]
-          : r < 0.9 ? ['ptree', pick(L.ptree)] : r < 0.95 ? ['bin', L.bin] : ['vending', pick(L.vending)];
+          : r < 0.88 ? ['ptree', pick(L.ptree)] : r < 0.91 ? ['bin', L.bin] : r < 0.94 ? ['bollard', L.bollard] : r < 0.97 ? ['charger', L.charger] : ['vending', pick(L.vending)];
       },
       ring() { const r = rnd(); return r < 0.4 ? ['lamp', L.lamp] : r < 0.75 ? ['jersey', L.jersey] : ['ptree', pick(L.ptree)]; },
       fill() {
@@ -1758,7 +1800,8 @@ window.PK = window.PK || {};
     const L = c.lib, pick = c.pick, rnd = c.rnd;
     const tomb = () => (rnd() < 0.5 ? ['tomb', L.tomb] : ['slab', L.slab]);
     genericProps(c, {
-      max: 190, step: 8,
+      max: 220, step: 8,
+      back() { const r = rnd(); return r < 0.45 ? ['tree', L.tree] : r < 0.75 ? tomb() : ['cross', L.cross]; },
       special(c2) {
         // central cemetery: rows of headstones and crosses behind an iron fence, crypts at the back
         for (let row = 0; row < 4; row++) for (let k = 0; k < 6; k++) {
@@ -1849,7 +1892,48 @@ window.PK = window.PK || {};
       }
     }
   }
+  // scattered floor decals (precomputed into the texture; the road strokes later cover the lane)
+  const blob = (g, x, y, rx, ry, a, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, rx, ry, a, 0, Math.PI * 2); g.fill(); };
+  function decor0(g) {               // supermarket floor: dropped receipts, price stickers, cereal, cardboard, scuffs
+    const rnd = PK.U.rng(1001);
+    for (let k = 0; k < 90; k++) blob(g, rnd() * 1024, rnd() * 1024, 6 + rnd() * 16, 2 + rnd() * 4, rnd() * 3, 'rgba(120,100,80,0.07)');
+    for (let k = 0; k < 160; k++) {
+      const x = rnd() * 1024 | 0, y = rnd() * 1024 | 0, r = rnd();
+      if (r < 0.25) { g.fillStyle = '#f4f4ee'; g.fillRect(x, y, 2, 4); g.fillStyle = '#b8b8b0'; g.fillRect(x, y + 1, 2, 1); }      // receipt
+      else if (r < 0.5) { g.fillStyle = ['#ffe14d', '#ff6a5a', '#7ad0ff'][k % 3]; g.fillRect(x, y, 3, 2); }                   // sticker
+      else if (r < 0.75) { g.fillStyle = '#e0b060'; for (let i = 0; i < 6; i++) g.fillRect(x + (rnd() * 8 | 0), y + (rnd() * 6 | 0), 1, 1); } // cereal
+      else { g.fillStyle = '#c89a5a'; g.fillRect(x, y, 4 + (rnd() * 4 | 0), 3); g.fillStyle = '#a07840'; g.fillRect(x, y + 2, 4, 1); } // cardboard
+    }
+  }
+  function decor1(g) {               // freezer: frost patches, meltwater puddles, footprints in the rime
+    const rnd = PK.U.rng(1101);
+    for (let k = 0; k < 70; k++) blob(g, rnd() * 1024, rnd() * 1024, 8 + rnd() * 22, 6 + rnd() * 14, rnd() * 3, 'rgba(255,255,255,0.28)');
+    for (let k = 0; k < 40; k++) { const x = rnd() * 1024, y = rnd() * 1024; blob(g, x, y, 5 + rnd() * 6, 3 + rnd() * 3, rnd() * 3, 'rgba(120,170,210,0.25)'); blob(g, x - 1, y - 1, 2, 1, 0, 'rgba(255,255,255,0.6)'); }
+    g.fillStyle = 'rgba(150,180,210,0.35)';
+    for (let k = 0; k < 12; k++) { let x = rnd() * 1000, y = rnd() * 1000; const a = rnd() * 6.28; for (let s = 0; s < 10; s++) { g.fillRect((x + (s & 1) * 3) | 0, y | 0, 2, 3); x += Math.cos(a) * 6; y += Math.sin(a) * 6; } }
+    g.fillStyle = '#ffffff';
+    for (let k = 0; k < 600; k++) g.fillRect(rnd() * 1024 | 0, rnd() * 1024 | 0, 1, 1);
+  }
+  function decor2(g) {               // market: sawdust, fallen leaves, squashed tomatoes, straw
+    const rnd = PK.U.rng(1201);
+    for (let k = 0; k < 80; k++) blob(g, rnd() * 1024, rnd() * 1024, 8 + rnd() * 18, 4 + rnd() * 8, rnd() * 3, 'rgba(230,200,140,0.22)');
+    for (let k = 0; k < 220; k++) {
+      const x = rnd() * 1024 | 0, y = rnd() * 1024 | 0, r = rnd();
+      if (r < 0.45) { g.fillStyle = rnd() < 0.5 ? '#4cb848' : '#8fd06a'; g.fillRect(x, y, 2, 1); g.fillRect(x + 1, y + 1, 2, 1); }   // leaf
+      else if (r < 0.6) { blob(g, x, y, 2.5, 1.8, 0, '#c8302a'); g.fillStyle = '#f07060'; g.fillRect(x - 1, y - 1, 1, 1); }          // tomato
+      else if (r < 0.85) { g.fillStyle = '#e8cf7a'; g.fillRect(x, y, 4, 1); g.fillRect(x + 2, y + 1, 3, 1); }                        // straw
+      else { g.fillStyle = '#f08a24'; g.fillRect(x, y, 2, 2); g.fillStyle = '#ffc060'; g.fillRect(x, y, 1, 1); }                        // orange
+    }
+  }
   function decor3(g) {               // painted arrows + "P" bays on the roof deck infields
+    const rnd = PK.U.rng(1301);
+    for (let k = 0; k < 18; k++) {   // manhole covers / drains
+      const x = 40 + rnd() * 944, y = 40 + rnd() * 944;
+      blob(g, x, y, 6, 6, 0, '#2a2630'); blob(g, x, y, 5, 5, 0, '#4a4650');
+      g.fillStyle = '#2a2630'; for (let j = -3; j <= 3; j += 2) g.fillRect(x - 4 | 0, y + j | 0, 8, 1);
+    }
+    g.strokeStyle = 'rgba(20,16,24,0.22)'; g.lineWidth = 1.5;   // old tyre marks in the bays
+    for (let k = 0; k < 30; k++) { const x = rnd() * 1024, y = rnd() * 1024, a = rnd() * 6.28, r = 20 + rnd() * 40; for (const o of [0, 4]) { g.beginPath(); g.arc(x, y, r + o, a, a + 0.8 + rnd()); g.stroke(); } }
     g.fillStyle = 'rgba(240,230,210,0.55)';
     for (const [x, y, a] of [[620, 705, 0], [620, 575, Math.PI], [640, 160, 0], [200, 450, Math.PI / 2]]) {
       g.save(); g.translate(x, y); g.rotate(a);
@@ -1862,7 +1946,8 @@ window.PK = window.PK || {};
   function props5(c) {
     const L = c.lib, pick = c.pick, rnd = c.rnd;
     genericProps(c, {
-      max: 175, step: 8,
+      max: 200, step: 8,
+      back() { const r = rnd(); return r < 0.4 ? ['shard', pick(L.shard)] : r < 0.7 ? ['cube', L.cube] : ['errwin', pick(L.errwin)]; },
       side() {
         const r = rnd();
         return r < 0.2 ? ['errwin', pick(L.errwin)] : r < 0.34 ? ['missing', L.missing] : r < 0.5 ? ['shard', pick(L.shard)] : r < 0.62 ? ['cube', L.cube]
@@ -2038,7 +2123,7 @@ window.PK = window.PK || {};
         [692, 302], [712, 225], [665, 165], [330, 146], [205, 160], [148, 255],
         [184, 372], [142, 490], [184, 608], [148, 722], [175, 830], [270, 882]
       ],
-      tile: tileMart, fog: '#ece2cd', bg: () => bgMart({ banners: ['SALE', 'FRESH', 'DRINK'], glow: true }), road: ROAD_MART, puddle: MILK,
+      tile: tileMart, fog: '#ece2cd', bg: () => bgMart({ banners: ['SALE', 'FRESH', 'DRINK'], glow: true }), road: ROAD_MART, puddle: MILK, decor: decor0, stencil: ['SALE', 'CART'],
       pads: [[0.07, 8], [0.30, -8], [0.62, 0], [0.70, 9]],
       puddles: [[0.19, -9, 8], [0.475, 10, 7], [0.80, -10, 9], [0.875, 9, 8]],
       ice: [], grip: 1, theme: 1, fx: 'none', seed: 20261107, mini: { bg: 'rgba(236,226,205,0.16)', edge: '#f2c418', road: '#fffaf0' }, props: props0
@@ -2051,7 +2136,7 @@ window.PK = window.PK || {};
         [790, 105], [670, 110], [600, 160], [580, 260], [580, 540], [555, 630], [480, 665], [405, 630], [385, 540],
         [385, 280], [360, 180], [280, 130], [180, 135], [120, 200], [105, 330], [105, 770], [140, 870], [240, 905], [340, 905]
       ],
-      tile: tileIce, fog: '#dcecf6', bg: () => bgFreezer('#dcecf6'), road: ROAD_ICE, puddle: MILK,
+      tile: tileIce, fog: '#dcecf6', bg: () => bgFreezer('#dcecf6'), road: ROAD_ICE, puddle: MILK, decor: decor1, stencil: ['ICE', '-20'], skid: 'rgba(255,255,255,0.5)',
       pads: [[0.06, 0], [0.24, 8], [0.42, -8], [0.86, 0]],
       puddles: [],
       ice: [[0.15, 0, 16], [0.29, -6, 14], [0.50, 0, 17], [0.66, 6, 15], [0.75, 0, 15], [0.95, -4, 14]],
@@ -2065,7 +2150,7 @@ window.PK = window.PK || {};
         [545, 385], [440, 350], [400, 240], [330, 140], [200, 150], [130, 270], [195, 400], [145, 520], [195, 640],
         [145, 760], [190, 860], [290, 893], [390, 895]
       ],
-      tile: tileWood, fog: '#efe2c0', bg: () => bgMarket('#efe2c0'), road: ROAD_WOOD, puddle: JUICE,
+      tile: tileWood, fog: '#efe2c0', bg: () => bgMarket('#efe2c0'), road: ROAD_WOOD, puddle: JUICE, decor: decor2, stencil: ['FRESH'],
       pads: [[0.06, 0], [0.33, 7], [0.56, -6], [0.66, 0]],
       puddles: [[0.22, 8, 8], [0.45, -9, 7], [0.78, 9, 8], [0.90, -8, 7]],
       ice: [], grip: 1, theme: 1, fx: 'none', seed: 777002, mini: { bg: 'rgba(240,226,190,0.16)', edge: '#4cb848', road: '#fff2c8' }, props: props2
@@ -2079,7 +2164,7 @@ window.PK = window.PK || {};
         [315, 400], [330, 315], [400, 250], [480, 225], [790, 225], [870, 200], [885, 150], [860, 108], [790, 95],
         [220, 95], [140, 130], [110, 220], [110, 800], [140, 880], [230, 905], [320, 905]
       ],
-      tile: tileAsphalt, fog: '#d98a72', bg: () => bgSkyline('#d98a72'), road: ROAD_ASPHALT, puddle: OIL,
+      tile: tileAsphalt, fog: '#d98a72', bg: () => bgSkyline('#d98a72'), road: ROAD_ASPHALT, puddle: OIL, stencil: ['SLOW', 'STOP'], zebra: true,
       pads: [[0.05, 0], [0.27, -7], [0.62, 7], [0.82, 0]],
       puddles: [[0.15, 9, 7], [0.40, -9, 7], [0.55, 9, 8], [0.72, -9, 7]],
       ice: [], grip: 1, theme: 1, fx: 'dusk', seed: 777003, mini: { bg: 'rgba(255,170,120,0.16)', edge: '#ff8a50', road: '#fff0e0' }, props: props3, decor: decor3
@@ -2093,7 +2178,7 @@ window.PK = window.PK || {};
         [450, 600], [440, 660], [490, 705], [600, 710], [760, 710], [860, 750], [890, 840], [830, 905], [700, 915],
         [580, 880], [470, 840], [360, 860], [270, 910], [170, 895], [120, 820], [120, 700]
       ],
-      tile: tileGrave, fog: '#34405c', bg: () => bgGraveyard('#34405c'), road: ROAD_GRAVE, puddle: SLIME,
+      tile: tileGrave, fog: '#34405c', bg: () => bgGraveyard('#34405c'), road: ROAD_GRAVE, puddle: SLIME, skid: 'rgba(40,28,20,0.3)', stencil: ['RIP'],
       pads: [[0.03, 0], [0.37, -7], [0.63, 7], [0.80, 0]],
       puddles: [[0.21, -9, 8], [0.41, 9, 8], [0.58, -8, 7], [0.86, 9, 8]],
       ice: [], grip: 1, theme: 2, ownNight: true, fx: 'haunted', seed: 777004, mini: { bg: 'rgba(40,60,90,0.35)', edge: '#7af08a', road: '#d8e0f0' }, props: props4, decor: decor4, overRoad: road4
@@ -2107,7 +2192,7 @@ window.PK = window.PK || {};
         [520, 680], [590, 620], [580, 500], [520, 400], [400, 340], [250, 330], [140, 280], [130, 170], [220, 110],
         [380, 120], [480, 190], [580, 130], [700, 180], [790, 120], [880, 140], [900, 230], [900, 300]
       ],
-      roadW: 36, barrier: 34,
+      roadW: 36, barrier: 34, skid: null, grain: 0.5,
       tile: tileGlitch, fog: '#1a0a2a', bg: () => bgGlitch('#1a0a2a'), road: ROAD_GLITCH, puddle: GLITCHP, iceStyle: 'glitch',
       pads: [[0.04, 0], [0.62, 0]],
       puddles: [[0.12, 6, 7], [0.19, -6, 7], [0.28, 6, 7], [0.36, -6, 7], [0.52, 5, 7], [0.69, -6, 7], [0.80, 6, 7], [0.90, -5, 7]],
@@ -2119,7 +2204,7 @@ window.PK = window.PK || {};
       desc: '키 큰 생울타리 미로 · 직각 코너와 지그재그, 막다른 길 조심! (미니맵 없음)',
       ctrl: mazeCtrl(MAZE_NODES, 34),
       roadW: 40, barrier: 34,
-      tile: tileLawn, fog: '#d4ecd0', bg: () => bgGarden('#d4ecd0'), road: ROAD_GARDEN, puddle: MUD,
+      tile: tileLawn, fog: '#d4ecd0', bg: () => bgGarden('#d4ecd0'), road: ROAD_GARDEN, puddle: MUD, skid: 'rgba(90,70,50,0.22)', stencil: ['MAZE'],
       pads: [[0.04, 0], [0.384, 6], [0.612, -6], [0.89, 0]],
       puddles: [[0.258, 8, 7], [0.48, -8, 7], [0.738, 8, 7]],
       ice: [], grip: 1, theme: 1, fx: 'none', seed: 777006, mini: { bg: 'rgba(60,120,60,0.2)', edge: '#2f7a34', road: '#e8dcc0' },
@@ -2371,6 +2456,8 @@ window.PK = window.PK || {};
       {   // extra dressing (own rng, so the base sequence above stays identical)
         const r3 = U.rng(def.seed ^ 0x3c3c);
         lib.wet = makeWetSign(); lib.plant = [makePlant(r3), makePlant(r3)]; lib.water = makeWater(); lib.bin = makeBin();
+        lib.baskets = makeBaskets(); lib.balloons = makeBalloons(); lib.ftrolley = makeFrTrolley(); lib.parasol = ['r', 'g', 'o'].map(makeParasol);
+        lib.bollard = makeBollard(); lib.charger = makeCharger();
         if (def.id === 0 || def.id === 3) lib.corral = makeCorral();
         if (def.id === 1) { lib.snowman = makeSnowman(); lib.icecream = makeIceCream(); }
         if (def.id === 2) { lib.flowers = [makeFlowers(r3), makeFlowers(r3)]; lib.sacks = makeSacks(); lib.cstack = [makeCrateStack(r3), makeCrateStack(r3)]; lib.bunting = makeBunting(); }
@@ -2483,6 +2570,10 @@ window.PK = window.PK || {};
         }
         if (i < 0) return;
         side = -side;
+        // coming out of a corner karts run wide: put the obstacle on the inside of that exit
+        let turn = 0;
+        for (let k = 0; k < 30; k += 2) turn += PK.U.angDiff(TAN[((i - k - 2) % N + N) % N], TAN[((i - k) % N + N) % N]);
+        if (Math.abs(turn) > 0.3) side = turn > 0 ? 1 : -1;
         if (isMover) {
           const m = movers[mi++ % movers.length], c = side * half * 0.45, amp = half * 0.3;
           const p = at(i, c);
@@ -2491,7 +2582,7 @@ window.PK = window.PK || {};
           return;
         }
         const o = kinds[ki++ % kinds.length];
-        const mid = o.mid && (o.r <= 4.6) && (rnd() < 0.5 || o.mid === 2);
+        const mid = o.mid && (o.r <= 4.6) && Math.abs(turn) < 0.4 && (rnd() < 0.5 || o.mid === 2);
         const lat = mid ? 0 : side * (half - o.r + 1.5);
         const p = at(i, lat);
         obs.push({ x: p[0], y: p[1], r: o.r, spr: o.spr, w: o.w, kind: o.kind, obstacle: true, i, lat, lo: lat, hi: lat, vx: 0, vy: 0, mv: null });
@@ -2540,11 +2631,14 @@ window.PK = window.PK || {};
 
       if (def.decor) def.decor(g, this);
 
-      // soft contact shadows under props
-      g.fillStyle = RS.propShadow;
+      // contact shadows under props: a soft drop shadow cast down-right by the ceiling lights / sun,
+      // plus a darker core right under the base (reads well from the raised camera)
       for (const p of this.props) {
-        if (p.x < -20 || p.y < -20 || p.x > TEX + 20 || p.y > TEX + 20) continue;
-        g.beginPath(); g.arc(p.x, p.y, p.w * 0.32, 0, Math.PI * 2); g.fill();
+        if (p.obstacle || p.x < -20 || p.y < -20 || p.x > TEX + 20 || p.y > TEX + 20) continue;
+        const h = p.spr && p.spr.width ? p.w * p.spr.height / p.spr.width : p.w;
+        g.fillStyle = RS.propShadow;
+        g.beginPath(); g.ellipse(p.x + h * 0.12, p.y + h * 0.1, p.w * 0.42 + h * 0.08, p.w * 0.26 + h * 0.06, 0.6, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.ellipse(p.x, p.y, p.w * 0.3, p.w * 0.2, 0, 0, Math.PI * 2); g.fill();
       }
 
       const path = () => {
@@ -2592,6 +2686,7 @@ window.PK = window.PK || {};
       stroke(ROAD_W - 30, RS.lane[3]);
       stroke(1.6, RS.line, [9, 9]);
       g.setLineDash([]);
+      this._roadDetail(g, def, RS);
       if (RS.mark) this._roadMarks(g, RS.mark);
       if (def.overRoad) def.overRoad(g, this, RS);
       this._obstacleMarks(g, RS);
@@ -2660,6 +2755,78 @@ window.PK = window.PK || {};
 
       const out = g.getImageData(0, 0, TEX, TEX);
       return new Uint32Array(out.data.buffer);
+    },
+
+    // surface detail on the lane (all maps, baked once): fine grain, worn edge chips, tyre / drift
+    // marks through the corners, a zebra crossing or two, big stencilled words on the straights
+    _roadDetail(g, def, RS) {
+      const N = this.N, P = this.PTS, TAN = this.TAN, half = this.ROAD_W / 2, rnd = PK.U.rng(def.seed ^ 0x77aa), ad = PK.U.angDiff;
+      const at = (i, lat) => [P[i][0] - Math.sin(TAN[i]) * lat, P[i][1] + Math.cos(TAN[i]) * lat];
+      const gr = def.grain == null ? 1 : def.grain;
+      for (let i = 0; i < N; i++) {                                   // grain + edge chips
+        for (let k = 0; k < 9 * gr; k++) {
+          const q = at(i, (rnd() * 2 - 1) * (half - 2));
+          g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)';
+          g.fillRect(q[0] | 0, q[1] | 0, 1, 1);
+        }
+        if (rnd() < 0.35) {
+          const sd = rnd() < 0.5 ? 1 : -1, q = at(i, sd * (half - 1 - rnd() * 2));
+          g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(q[0] | 0, q[1] | 0, 1 + (rnd() * 2 | 0), 1);
+        }
+      }
+      // drift marks: paired arcs swinging to the outside of every real corner
+      const skid = def.skid === undefined ? 'rgba(20,16,12,0.13)' : def.skid;
+      if (skid) {
+        g.strokeStyle = skid; g.lineWidth = 1.2; g.setLineDash([]);
+        let i = 0;
+        while (i < N) {
+          if (this._bend(i) < 0.45) { i++; continue; }
+          let j = i; while (j < N && this._bend(j) >= 0.35) j++;
+          const i0 = Math.max(0, i - 4), i1 = Math.min(N - 1, j + 8), sg = ad(TAN[i0], TAN[i1]) > 0 ? 1 : -1;
+          for (const [amp, off] of [[11, 0], [7, 5]]) for (const pair of [-1.6, 1.6]) {
+            g.beginPath();
+            for (let k = i0; k <= i1; k++) {
+              const u = (k - i0) / Math.max(1, i1 - i0), q = at(k, -sg * (off * 0.4 + amp * Math.sin(Math.PI * u)) + pair - sg * off);
+              if (k === i0) g.moveTo(q[0], q[1]); else g.lineTo(q[0], q[1]);
+            }
+            g.stroke();
+          }
+          i = j + 1;
+        }
+      }
+      // free spots on straights (clear of the start, hazards, obstacles and food rows)
+      const avoid = this.pads.concat(this.puddles, this.ice, this.obstacles || []);
+      const food = []; for (let j = 0; j < 9; j++) { food.push(Math.floor(N * (j + 0.5) / 9)); food.push(Math.floor(N * (j + 1) / 9) % N); }
+      const used = [];
+      const free = (i, clr) => i > 30 && i < N - 30 && this._bend(i) < 0.06 && this._bend((i + 6) % N) < 0.08 && this._bend(i - 6) < 0.08
+        && food.every((f) => Math.abs(f - i) > 5) && used.every((u) => Math.abs(u - i) > 40)
+        && avoid.every((q) => Math.hypot(q.x - P[i][0], q.y - P[i][1]) > clr);
+      const local = (i, fn) => { g.save(); g.translate(P[i][0], P[i][1]); g.rotate(TAN[i]); fn(); g.restore(); };
+      if (def.zebra) {                                                // pedestrian crossings (rooftop)
+        let n = 0;
+        for (let i = Math.floor(N * 0.2); i < N && n < 3; i += 7) {
+          if (!free(i, 30)) continue;
+          used.push(i); n++;
+          local(i, () => { g.fillStyle = 'rgba(244,240,232,0.8)'; for (let y = -half + 3; y < half - 3; y += 6) g.fillRect(-5, y, 10, 3); });
+        }
+      }
+      const words = def.stencil || [];
+      let w = 0;
+      for (let i = Math.floor(N * 0.12); i < N && w < words.length * 2; i += 5) {
+        if (!free(i, 34)) continue;
+        used.push(i);
+        const word = words[w % words.length], sc = 2, tw = textW(word, sc);
+        local(i, () => {
+          g.fillStyle = RS.mark || 'rgba(255,255,255,0.7)';
+          let c0 = -tw / 2;
+          for (const ch of word) {
+            const gl = FONT[ch] || FONT[' '];
+            for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if (gl[r][c] === '1') g.fillRect((4 - r) * sc - 5, c0 + c * sc, sc, sc);
+            c0 += 4 * sc;
+          }
+        });
+        w++;
+      }
     },
 
     // baked under the obstacles: a contact shadow + themed debris; moving ones get a scuffed track

@@ -732,6 +732,10 @@ window.PK = window.PK || {};
         setVel(k, tx * keep - nx * vn * OBS_BOUNCE + ovx, ty * keep - ny * vn * OBS_BOUNCE + ovy);
         if (hard && -vn > 12) {
           k._obsT = OBS_CD; k.obsHits = (k.obsHits || 0) + 1; k.combo = 0;
+          if (k.ai) {   // recover toward the open road: centre-side for kerb obstacles, else the side we bounced to
+            const mid = (o.lo + o.hi) / 2;
+            k.ai.avoidO = o; k.ai.avoidS = Math.abs(mid) > 3 ? (mid > 0 ? -1 : 1) : (k.lat > mid ? 1 : -1);
+          }
           if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
           const G = PK.Game;
           if (k.isPlayer && G && G.sfx) G.sfx('bump');
