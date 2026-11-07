@@ -1161,36 +1161,54 @@ window.PK = window.PK || {};
   function refreshTitle() { if (el.playerTitle) el.playerTitle.textContent = titleOf() ? '칭호 「' + titleOf() + '」' : ''; }
 
   // ---- 🏆 랭킹: per-map top 10 (worldwide via Firebase when js/rank-config.js is set)
-  let rankMap = 0, rankReq = 0;
+  // 🏆 ranking: tabs [전체] + one per map; top 10 people (each once, fastest record); my row stands out,
+  // and when I'm below 10th my own place is added under the list
+  let rankTab = 'all', rankReq = 0;
   function goRank() {
     G.state = 'rank'; G.attract = true;
     showOnly('rank');
-    rankMap = Math.max(0, Math.min(MAPS().length - 1, baseMap | 0));   // the last regular map raced
+    rankTab = 'all';
     if (el.rankNick && PK.Rank) el.rankNick.value = PK.Rank.nick();
     buildRank();
   }
-  // one combined board: every map's records in a single table (map name on each row), fastest first
+  function rankRow(e, ms, showMap) {
+    const i = e.rank - 1;
+    const r = mk('div', 'rrow' + (e.me ? ' me' : '') + (i < 3 ? ' top' + (i + 1) : '') + (showMap ? '' : ' nomap'));
+    r.appendChild(mk('b', null, ['🥇', '🥈', '🥉'][i] || e.rank + '.'));
+    const nm = mk('span', 'rname', e.name);
+    if (e.me) nm.appendChild(mk('em', 'rme', '나'));
+    r.appendChild(nm);
+    if (showMap) {
+      const m = ms.find((x) => x.id === e.map);
+      r.appendChild(mk('span', 'rmap', m ? (m.secret ? '★ ' : '') + m.nameKo : ''));
+    }
+    r.appendChild(mk('span', 'rkart', (PK.Karts.DEFS[e.kart] || {}).nameKo || ''));
+    r.appendChild(mk('span', 'rtime', fmt(e.time)));
+    return r;
+  }
   async function buildRank() {
-    const tabs = el.rankTabs, list = el.rankList;
-    if (tabs) tabs.innerHTML = '';
+    const tabs = el.rankTabs, list = el.rankList, ms = MAPS();
+    if (tabs) {
+      tabs.innerHTML = '';
+      [['all', '🌏 전체']].concat(ms.map((m) => [m.id, (m.secret ? '★ ' : '') + m.nameKo])).forEach(([id, label]) => {
+        const b = mk('button', 'btn ' + (id === rankTab ? '' : 'alt'), label);
+        b.addEventListener('click', () => { ensureAudio(); uiBeep(0); rankTab = id; buildRank(); });
+        tabs.appendChild(b);
+      });
+    }
     if (!list || !PK.Rank) return;
     list.innerHTML = '<div class="rmsg">불러오는 중…</div>';
-    const ms = MAPS(), req = ++rankReq;
-    const res = PK.Rank.topAll ? await PK.Rank.topAll(ms.map((m) => m.id)) : await PK.Rank.top(rankMap);
+    const req = ++rankReq, all = rankTab === 'all';
+    const res = all ? await PK.Rank.topAll(ms.map((m) => m.id)) : await PK.Rank.top(rankTab);
     if (req !== rankReq) return;   // a newer tab was picked meanwhile
     if (el.rankInfo) el.rankInfo.textContent = (res.online ? '🌏 전 세계 랭킹' : (PK.Rank.configured ? '⚠ 온라인 연결 실패 · 이 기기 기록' : '📱 이 기기 기록 (온라인 랭킹 설정 전)')) + ' · 내 이름 ' + PK.Rank.nick();
     list.innerHTML = '';
     if (!res.list.length) { list.appendChild(mk('div', 'rmsg', '아직 기록이 없어요. 첫 기록을 세워 보세요!')); return; }
-    res.list.forEach((e, i) => {
-      const r = mk('div', 'rrow' + (e.me ? ' me' : '') + (i < 3 ? ' top' + (i + 1) : ''));
-      r.appendChild(mk('b', null, ['🥇', '🥈', '🥉'][i] || (i + 1) + '.'));
-      r.appendChild(mk('span', 'rname', e.name));
-      const m = ms.find((x) => x.id === e.map);
-      r.appendChild(mk('span', 'rmap', m ? (m.secret ? '★ ' : '') + m.nameKo : ''));
-      r.appendChild(mk('span', 'rkart', (PK.Karts.DEFS[e.kart] || {}).nameKo || ''));
-      r.appendChild(mk('span', 'rtime', fmt(e.time)));
-      list.appendChild(r);
-    });
+    res.list.forEach((e) => list.appendChild(rankRow(e, ms, all)));
+    if (res.mine && res.mine.rank > res.list.length) {   // I'm below 10th: show my own place too
+      list.appendChild(mk('div', 'rgap', '⋯'));
+      list.appendChild(rankRow(res.mine, ms, all));
+    } else if (!res.mine) list.appendChild(mk('div', 'rmsg', all ? '아직 내 기록이 없어요 · 완주하면 올라가요' : '이 맵에는 아직 내 기록이 없어요'));
   }
 
   function goAch() {
@@ -1725,6 +1743,10 @@ window.PK = window.PK || {};
       else if (c === 'KeyN') { uiBeep(0); goModes(); }
     } else if (st === 'rank') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
+      else if (c === 'ArrowLeft' || c === 'ArrowRight') {
+        const ids = ['all'].concat(MAPS().map((m) => m.id)), i = ids.indexOf(rankTab), n = ids.length;
+        rankTab = ids[((i + (c === 'ArrowRight' ? 1 : -1)) % n + n) % n]; uiBeep(0); buildRank();
+      }
     } else if (st === 'modes' || st === 'settings') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
       else if (st === 'modes' && c === 'KeyL') { uiBeep(0); ghostMode = false; goMaps(); }

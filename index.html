@@ -210,7 +210,11 @@
   .rrow .rmap { color: #9fe8ff; font-size: .8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rrow .rtime { color: #fff; text-align: right; font-variant-numeric: tabular-nums; }
   .rrow.top1 { background: #4a3a12; } .rrow.top2 { background: #3a3a46; } .rrow.top3 { background: #43301e; }
-  .rrow.me { outline: .15em solid #7dff9a; }
+  .rrow.nomap { grid-template-columns: 2.2em 1fr 4.5em 5em; }
+  .rrow.me { background: #1d6b34 !important; outline: .2em solid #7dff9a; box-shadow: 0 0 .6em #7dff9a; }
+  .rrow.me .rname, .rrow.me .rtime { color: #eaffea; font-weight: bold; }
+  .rme { font-style: normal; font-size: .7em; margin-left: .4em; padding: .05em .4em; background: #7dff9a; color: #0a2a12; border-radius: .3em; vertical-align: middle; }
+  .rgap { text-align: center; color: #a898c8; line-height: .8; }
   .rmsg { padding: .6em; text-align: center; font-size: .8em; color: #c8bce0; background: #2a1f3d; border: .12em solid #000; }
   #rankNick { font: inherit; font-size: .85em; padding: .3em .5em; width: 9em; border: .15em solid #000; border-radius: .3em; }
   /* ---------- 업적 ---------- */
@@ -386,7 +390,7 @@
       <button id="btnNick" class="btn alt">이름 저장</button>
       <button id="btnRankBack" class="btn alt">← 뒤로</button>
     </div>
-    <div class="hint">모든 맵에서 가장 빠른 10명 · 완주하면 기록이 자동으로 올라가요 · Esc 뒤로</div>
+    <div class="hint">🌏 전체는 모든 맵 통합 · ← → 칸 바꾸기 · 한 사람당 가장 빠른 기록 1개 · 10위까지 · 완주하면 기록이 자동으로 올라가요 · Esc 뒤로</div>
   </div>
 
   <!-- 업적 / 칭호 (filled by main.js buildAch) -->

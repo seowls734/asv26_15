@@ -1,10 +1,11 @@
-// PK.Rank — ranking board per map. With window.PK_RANK_DB (js/rank-config.js) set to a Firebase
+// PK.Rank — ranking board. With window.PK_RANK_DB (js/rank-config.js) set to a Firebase
 // Realtime Database URL, finish times go to a worldwide board through the plain REST API (no SDK);
-// otherwise (or when offline) a top-10 kept on this device is used.
+// otherwise (or when offline) a top list kept on this device is used.
+// Boards show the 10 fastest people (each name once, with its fastest record) plus where I stand.
 window.PK = window.PK || {};
 (function (PK) {
   'use strict';
-  const TOP = 10, LS_LOCAL = 'pk_rank_local', LS_NICK = 'pk_nick';
+  const TOP = 10, FETCH = 50, LS_LOCAL = 'pk_rank_local', LS_NICK = 'pk_nick';
   const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
   const db = () => String(window.PK_RANK_DB || '').trim().replace(/\/+$/, '');
@@ -21,7 +22,7 @@ window.PK = window.PK || {};
   function local() { try { const o = JSON.parse(lsGet(LS_LOCAL) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
   function addLocal(mapId, e) {
     const o = local(), k = 'm' + mapId, a = Array.isArray(o[k]) ? o[k] : [];
-    a.push(e); a.sort((x, y) => x.time - y.time); a.length = Math.min(a.length, TOP);
+    a.push(e); a.sort((x, y) => x.time - y.time); a.length = Math.min(a.length, FETCH);
     o[k] = a; lsSet(LS_LOCAL, JSON.stringify(o));
   }
 
@@ -37,36 +38,42 @@ window.PK = window.PK || {};
       return r.ok;
     } catch (err) { return false; }
   }
-  // -> { online: bool, list: [{ name, time, kart, at, me }] }
-  async function top(mapId) {
-    const url = db(), me = nick();
-    const mark = (a) => a.map((e) => Object.assign({}, e, { me: e.name === me }));
+  // raw records of one map, fastest first: -> { online, list: [{ name, time, kart, at, map }] }
+  async function raw(mapId) {
+    const url = db(), id = mapId | 0;
+    const tag = (a) => a.map((e) => ({ name: clean(e.name) || '???', time: e.time, kart: e.kart | 0, at: e.at | 0, map: id }));
     if (url) {
       try {
-        const q = url + '/scores/m' + (mapId | 0) + '.json?orderBy=%22time%22&limitToFirst=' + (TOP * 3);
-        const r = await fetch(q);
+        const r = await fetch(url + '/scores/m' + id + '.json?orderBy=%22time%22&limitToFirst=' + FETCH);
         if (r.ok) {
           const o = (await r.json()) || {};
-          const a = Object.keys(o).map((k) => o[k]).filter((e) => e && typeof e.time === 'number')
-            .map((e) => ({ name: clean(e.name) || '???', time: e.time, kart: e.kart | 0, at: e.at | 0 }));
+          const a = tag(Object.keys(o).map((k) => o[k]).filter((e) => e && typeof e.time === 'number'));
           a.sort((x, y) => x.time - y.time);
-          return { online: true, list: mark(a.slice(0, TOP)) };
+          return { online: true, list: a };
         }
       } catch (err) { /* fall back to the local board */ }
     }
-    return { online: false, list: mark((local()['m' + (mapId | 0)] || []).slice(0, TOP)) };
+    return { online: false, list: tag(local()['m' + id] || []) };
   }
-
-  // every map's board merged into one list: -> { online, list: [{ ...entry, map }] } sorted by time
+  // sorted records -> the 10 fastest people (each name once) + my place
+  //   -> { list: [{ ...entry, rank, me }], mine: { ...entry, rank, me } | null (my best, also when below 10th) }
+  function board(all) {
+    const me = nick(), seen = new Set(), people = [];
+    for (const e of all) { if (seen.has(e.name)) continue; seen.add(e.name); people.push(Object.assign({}, e, { rank: people.length + 1, me: e.name === me })); }
+    return { list: people.slice(0, TOP), mine: people.find((e) => e.me) || null };
+  }
+  // one map's board
+  async function top(mapId) {
+    const r = await raw(mapId);
+    return Object.assign({ online: r.online }, board(r.list));
+  }
+  // every map merged into one board
   async function topAll(mapIds) {
-    const res = await Promise.all(mapIds.map((id) => top(id).then((r) => ({ id, r }))));
-    const list = [];
-    res.forEach(({ id, r }) => r.list.forEach((e) => list.push(Object.assign({ map: id }, e))));
-    list.sort((a, b) => a.time - b.time);
-    // 10 people at most: each name once, with its fastest record
-    const seen = new Set(), out = [];
-    for (const e of list) { if (seen.has(e.name)) continue; seen.add(e.name); out.push(e); if (out.length >= TOP) break; }
-    return { online: res.some((x) => x.r.online), list: out };
+    const res = await Promise.all(mapIds.map((id) => raw(id)));
+    const all = [];
+    res.forEach((r) => r.list.forEach((e) => all.push(e)));
+    all.sort((a, b) => a.time - b.time);
+    return Object.assign({ online: res.some((r) => r.online) }, board(all));
   }
 
   PK.Rank = { get configured() { return !!db(); }, nick, setNick, submit, top, topAll };
