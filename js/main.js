@@ -164,7 +164,7 @@ window.PK = window.PK || {};
     if (el.btnCalm) el.btnCalm.textContent = t;
     for (let i = 0; i < pauseBtns.length; i++) if (pauseBtns[i].getAttribute('data-act') === 'calm') pauseBtns[i].textContent = t;
   }
-  // easy controls ('쉬운 조작', on by default): auto gas, steering help toward the racing line, auto drift
+  // easy controls ('쉬운 조작', on by default): light steering help toward the racing line while accelerating, auto drift
   const LS_EASY = 'pk_easy';
   let easy = true;
   // real 3D view (js/render3d.js + Three.js) — off: the user chose the pixel Mode-7 map again.
@@ -1447,19 +1447,18 @@ window.PK = window.PK || {};
     return PIN;
   }
 
-  // easy controls: borrow the AI's racing-line steer/drift for the player and blend it with the input.
-  // No steer held -> the kart follows the road by itself; steering still wins when the player turns.
+  // easy controls: a light steering help toward the racing line and auto drift in corners, only while
+  // the player is driving (gas held). Nothing moves by itself: no auto gas, no steering when idle.
   function easyAssist(inp) {
     const p = G.player;
-    if (!p || !PK.Karts.aiInput) return;
+    if (!p || !PK.Karts.aiInput || !inp.gas) return;
     let ai;
     try { ai = PK.Karts.aiInput(p, G); } catch (e) { return; }
     if (!ai) return;
     const user = +inp.steer || 0, aiS = U.clamp(+ai.steer || 0, -1, 1);
-    inp.steer = Math.abs(user) < 0.05 ? aiS * 0.9 : U.clamp(user * 0.7 + aiS * 0.35, -1, 1);
+    inp.steer = Math.abs(user) < 0.05 ? aiS * 0.45 : U.clamp(user * 0.8 + aiS * 0.25, -1, 1);
     inp.left = inp.steer < -0.3; inp.right = inp.steer > 0.3;
-    if (!inp.brake) inp.gas = true;                      // auto accelerate (brake still stops)
-    if (ai.drift && Math.abs(inp.steer) > 0.35) inp.drift = true;   // corners drift by themselves
+    if (ai.drift && Math.abs(user) > 0.35) inp.drift = true;   // corners drift by themselves while turning
   }
 
   const isEnter = (c) => c === 'Enter' || c === 'Space' || c === 'NumpadEnter';
