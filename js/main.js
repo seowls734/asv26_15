@@ -276,7 +276,6 @@ window.PK = window.PK || {};
   function goModes() { G.state = 'modes'; G.attract = true; showOnly('modes'); }
   function goSettings() {
     G.state = 'settings'; G.attract = true; showOnly('settings');
-    const be = document.getElementById('btnEnding'); if (be) be.style.display = PK.Intro && PK.Intro.endingSeen && PK.Intro.endingSeen() ? '' : 'none';
   }
   function goGhostMode() { ghostMode = true; gp = null; goMaps(); }
   // finish in ghost mode: who won? (old = the ghost's time before this run, 0 = no ghost yet)
@@ -391,7 +390,7 @@ window.PK = window.PK || {};
   const RACE_STATES = { countdown: 1, race: 1, finished: 1 };
   // one place that decides which DOM overlay is visible
   // ---------------------------------------------------------------------------
-  // 🎓 tutorial (first race only), 📅 daily challenge, 🏆 Grand Prix, 🏁 ending cutscene
+  // 🎓 tutorial (first race only), 📅 daily challenge, 🏆 Grand Prix
   // ---------------------------------------------------------------------------
   // per-race counters for the daily challenge
   let rstat = { mt: 0, wall: 0, ovt0: 0 }, prevMt = false;
@@ -535,12 +534,10 @@ window.PK = window.PK || {};
   function gpFinalDone() {
     const place = gp ? gp.place : 6;
     gp = null;
-    if (place === 1 && PK.Intro) playScript('ending', { place: 1, gp: true }, goTitle);
-    else goTitle();
+    goTitle();
   }
 
-  // ---- 🏁 ending cutscene: after the first race you finish (and after winning a Grand Prix)
-  let pendingEnding = 0;
+  // ---- cutscene runner (js/intro.js)
   function playScript(name, ctx, done) {
     if (!PK.Intro) { setTimeout(done, 0); return; }
     G.state = 'intro'; G.attract = true;
@@ -585,7 +582,6 @@ window.PK = window.PK || {};
     G.state = 'title'; G.attract = true; gp = null;
     showOnly('title');
     refreshDaily();
-    const be = document.getElementById('btnEnding'); if (be) be.style.display = PK.Intro && PK.Intro.endingSeen && PK.Intro.endingSeen() ? '' : 'none';
     refreshTitle();
     updateBestText();
     setupRace(randomKart(), true, baseMap);
@@ -1253,7 +1249,6 @@ window.PK = window.PK || {};
     if (G.online) { if (PK.Net) PK.Net.toLobby(); return; }   // online 2P: back to the room lobby
     if (testMode) { testBack(); return; }
     if (gp) { gpNext(); return; }
-    if (pendingEnding) { const pl = pendingEnding; pendingEnding = 0; playScript('ending', { place: pl }, goTitle); return; }
     startRace(playerDef, REGULAR[(REGULAR.indexOf(baseMap) + 1) % REGULAR.length], true);
   }
 
@@ -1559,7 +1554,6 @@ window.PK = window.PK || {};
     if (!testMode && !ghostMode) achOnFinish(k);
     const place = computeStandings().indexOf(k) + 1;
     if (!testMode && !ghostMode && !G.online) dailyCheck(k, place);
-    if (!testMode && !ghostMode && !G.online && !gp && PK.Intro && PK.Intro.endingSeen && !PK.Intro.endingSeen()) pendingEnding = place;
     if (!testMode && PK.Rank) PK.Rank.submit(raceMap, k.finishTime, k.defIndex);   // ranking board
     musicStop();
   }
@@ -1777,7 +1771,6 @@ window.PK = window.PK || {};
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
     on(document.getElementById('btnIntro'), () => { ensureAudio(); uiBeep(1); playIntro(); });
-    on(document.getElementById('btnEnding'), () => { ensureAudio(); uiBeep(1); playScript('ending', { place: 1 }, goTitle); });
     on(document.getElementById('btnGP'), () => { ensureAudio(); uiBeep(1); goGP(); });
     on(document.getElementById('btnModes'), () => { ensureAudio(); uiBeep(1); goModes(); });
     on(document.getElementById('btnSettings'), () => { ensureAudio(); uiBeep(1); goSettings(); });
@@ -2638,7 +2631,7 @@ window.PK = window.PK || {};
     else if (ghostReward === 'miss') textC('THE GHOST GOT AWAY...', PCX, y + 12, 1, '#a898c8');
     else if (ghostReward === 'glitch') textC('GLITCH KART UNLOCKED!', PCX, y + 12, 1, blink ? '#00e8b8' : '#ff40d0');
     if (gp) textC('GRAND PRIX ' + (gp.round + 1) + '/' + gp.maps.length, PCX, py + ph - 19, 1, '#ffcc00');
-    const nx = gp ? (gp.round + 1 < gp.maps.length ? 'ENTER: NEXT ROUND' : 'ENTER: GP RESULTS') : pendingEnding ? 'ENTER: CONTINUE' : testMode ? 'ENTER: CHAR TEST' : 'ENTER: NEXT MAP';
+    const nx = gp ? (gp.round + 1 < gp.maps.length ? 'ENTER: NEXT ROUND' : 'ENTER: GP RESULTS') : testMode ? 'ENTER: CHAR TEST' : 'ENTER: NEXT MAP';
     if (((G.time * 2) | 0) & 1) textC(nx + '  R: RETRY  ESC: MENU', PCX, py + ph - 10, 1, '#fff');
   }
 

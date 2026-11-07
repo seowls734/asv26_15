@@ -182,7 +182,35 @@ window.PK = window.PK || {};
     '.......KkkkkkkkkkkK.......',
     '........KKKKKKKKKK........'
   ];
-  const STYLES = { pony: [PONY_HEAD, PONY_BODY], cap: [CAP_HEAD, DRV_BODY], bun: [BUN_HEAD, DRV_BODY] };
+  // the player = the opening cutscene's hero (js/intro.js BODY + PAL_ME, drawn 2x there) seen from
+  // behind at the same 2x scale and the same flat colours: R hair, k skin, S shirt
+  const HERO_HEAD = [
+    '.........RRRRRRRR.........',
+    '.........RRRRRRRR.........',
+    '.......RRRRRRRRRRRR.......',
+    '.......RRRRRRRRRRRR.......',
+    '.....RRRRRRRRRRRRRRRR.....',
+    '.....RRRRRRRRRRRRRRRR.....',
+    '.....RRRRRRRRRRRRRRRR.....',
+    '.....RRRRRRRRRRRRRRRR.....',
+    '.....kkRRRRRRRRRRRRkk.....',
+    '.....kkRRRRRRRRRRRRkk.....',
+    '.....kkRRRRRRRRRRRRkk.....',
+    '.....kkRRRRRRRRRRRRkk.....',
+    '.......kkRRRRRRRRkk.......',
+    '.......kkRRRRRRRRkk.......'
+  ];
+  const HERO_BODY = [
+    '.........kkkkkkkk.........',
+    '.........kkkkkkkk.........',
+    '.......SSSSSSSSSSSS.......',
+    '.......SSSSSSSSSSSS.......',
+    '.....SSSSSSSSSSSSSSSS.....',
+    '.....SSSSSSSSSSSSSSSS.....',
+    '...SSSSSSSSSSSSSSSSSSSS...',
+    '...SSSSSSSSSSSSSSSSSSSS...'
+  ];
+  const STYLES = { pony: [PONY_HEAD, PONY_BODY], cap: [CAP_HEAD, DRV_BODY], bun: [BUN_HEAD, DRV_BODY], hero: [HERO_HEAD, HERO_BODY] };
   const DRV_X = (SW - 26) >> 1;
 
   // character drivers (26 wide, same row counts as DRV_HEAD / DRV_BODY).
@@ -274,7 +302,7 @@ window.PK = window.PK || {};
   const SPR_EMPTY = []; // SPR_EMPTY[defIndex] = straight-on cart with nobody in it (parked carts in cutscenes)
   const SPR_PHASE = []; // SPR_PHASE[defIndex] = faded [l, c, r] for karts with the 'phase' skill (else undefined)
   // drivers: [hair, shirt, skin]. ME matches PAL_ME in intro.js.
-  const ME = ['#3b2a20', '#7d8592', '#f1c9a0'];
+  const ME = ['#3b2a20', '#7d8592', '#f1c9a0', 'hero'];
   // shoppers: [hair, shirt, skin, hairstyle, cap colour]
   const SHOPPERS = [['#1c1c22', '#c8504a', '#f1c9a0', 'pony'], ['#7a5232', '#3a8a5a', '#d9a878', 'cap', '#e0e0e8'], ['#d8b860', '#4a6ab8', '#f6d6b8', 'bun'],
     ['#8a8a90', '#b85a9a', '#e9bf95', 'cap', '#3a5aa8'], ['#2a1a10', '#e0a030', '#b07a52', ''], ['#5a3420', '#5a5a66', '#e2b48a', 'pony']];
@@ -523,7 +551,7 @@ window.PK = window.PK || {};
   const EXT = {};
   function headExt(key) {
     if (EXT[key]) return EXT[key];
-    const rows = key === 'vamp' ? VAMP_HEAD : key === 'ghost' ? GHOST_HEAD : DRV_HEAD, re = HEAD_RE[key] || HEAD_RE.hero;
+    const rows = key === 'vamp' ? VAMP_HEAD : key === 'ghost' ? GHOST_HEAD : HERO_HEAD, re = HEAD_RE[key] || HEAD_RE.hero;
     return (EXT[key] = rows.map((r) => {
       let a = -1, b = -1;
       for (let x = 0; x < r.length; x++) if (re.test(r[x])) { if (a < 0) a = x; b = x; }
