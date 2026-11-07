@@ -1,1 +1,242 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>픽셀 카트 · 슈퍼마트 서킷</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #0d0a14; color: #fff;
+    font-family: "DungGeunMo", "Galmuri11", "NeoDunggeunmo", ui-monospace, "Courier New", monospace;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  #wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 320px; height: 180px; }
+  #game {
+    display: block; width: 100%; height: 100%; background: #000;
+    image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none;
+    box-shadow: 0 0 0 4px #000, 0 0 40px rgba(255, 160, 0, .12);
+  }
+  /* ---------- overlays ---------- */
+  .ov {
+    position: absolute; inset: 0; display: none; overflow: auto;
+    align-items: center; justify-content: center; flex-direction: column;
+    background: radial-gradient(ellipse at center, rgba(20, 10, 30, .55), rgba(5, 3, 10, .85));
+    padding: 2%;
+  }
+  .ov.on { display: flex; }
+  .panel {
+    background: #2a1f3d; border: .25em solid #000;
+    box-shadow: .3em .3em 0 #000, inset -.25em -.25em 0 rgba(0, 0, 0, .35), inset .25em .25em 0 rgba(255, 255, 255, .12);
+    padding: .8em 1.2em; margin: .4em;
+  }
+  h1 {
+    margin: 0; font-size: 3.6em; line-height: 1; color: #ffcc00; letter-spacing: .05em;
+    text-shadow: .06em .06em 0 #ff6a00, .12em .12em 0 #000, -.03em -.03em 0 #000;
+  }
+  .sub { margin: .5em 0 .8em; font-size: 1.05em; color: #ffe9a8; text-shadow: .12em .12em 0 #000; letter-spacing: .1em; }
+  .btn {
+    font: inherit; font-size: 1.2em; cursor: pointer; color: #1a0d00; background: #ffcc00;
+    border: .2em solid #000; padding: .35em 1.1em; margin: .25em;
+    box-shadow: .2em .2em 0 #000, inset -.18em -.18em 0 #e07800, inset .18em .18em 0 #fff2a0;
+  }
+  .btn:hover, .btn:focus { background: #ffe14d; outline: none; }
+  .btn:active { transform: translate(.15em, .15em); box-shadow: .05em .05em 0 #000, inset -.18em -.18em 0 #e07800; }
+  .btn.alt { background: #6d5a8c; color: #fff; box-shadow: .2em .2em 0 #000, inset -.18em -.18em 0 #3e3054, inset .18em .18em 0 #9a86ba; }
+  .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .ctrl { display: grid; grid-template-columns: auto auto; gap: .15em 1em; font-size: .8em; margin: 0; }
+  .ctrl dt { color: #ffcc00; text-align: right; white-space: nowrap; text-shadow: .1em .1em 0 #000; }
+  .ctrl dd { margin: 0; color: #e8e0f8; }
+  #best { margin-top: .5em; font-size: .85em; color: #ffb347; text-shadow: .1em .1em 0 #000; }
+  /* ---------- kart select ---------- */
+  .stitle { font-size: 1.6em; color: #ffcc00; text-shadow: .1em .1em 0 #ff6a00, .18em .18em 0 #000; margin: 0 0 .3em; }
+  #cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5em; width: 100%; max-width: 62em; }
+  .card {
+    background: #2a1f3d; border: .2em solid #000; padding: .45em .55em; cursor: pointer; font-size: .72em;
+    box-shadow: .22em .22em 0 #000, inset -.2em -.2em 0 rgba(0, 0, 0, .35), inset .2em .2em 0 rgba(255, 255, 255, .1);
+    transition: transform .08s;
+  }
+  .card.sel { background: #4a2f1a; border-color: #ffcc00; transform: translateY(-.25em);
+    box-shadow: .22em .45em 0 #000, 0 0 0 .15em #ff8800, inset .2em .2em 0 rgba(255, 220, 120, .2); }
+  .khead { display: flex; align-items: center; gap: .5em; }
+  .kspr { width: 4.2em; height: auto; image-rendering: pixelated; background: rgba(0, 0, 0, .35); border: .12em solid #000; padding: .15em; }
+  .kname { font-size: 1.35em; text-shadow: .1em .1em 0 #000; }
+  .kname small { font-size: .65em; color: #c8bce0; margin-left: .3em; }
+  .wt { color: #ffcc00; font-size: .95em; margin-top: .15em; }
+  .wt span { color: #c8bce0; }
+  .stat { display: flex; align-items: center; gap: .4em; margin-top: .22em; }
+  .stat b { width: 4.3em; font-weight: normal; color: #e8e0f8; white-space: nowrap; }
+  .bar { flex: 1; height: .7em; background: #120c1c; border: .12em solid #000; }
+  .bar i { display: block; height: 100%; background: linear-gradient(#ffe066, #ff9a00); box-shadow: inset 0 -.15em 0 #c85a00; }
+  .skill { display: flex; gap: .45em; align-items: flex-start; margin-top: .4em; padding-top: .35em; border-top: .12em dashed #5a4a78; }
+  .skill canvas { width: 2.2em; height: 2.2em; image-rendering: pixelated; background: #120c1c; border: .12em solid #000; flex: none; }
+  .sname { color: #ffb347; font-size: 1.05em; }
+  .sdesc { color: #d8d0ea; font-size: .9em; line-height: 1.3; }
+  .row { display: flex; gap: .4em; margin-top: .55em; align-items: center; }
+  .hint { font-size: .75em; color: #a898c8; }
+  /* ---------- touch ---------- */
+  #touch { position: absolute; inset: 0; display: none; pointer-events: none; touch-action: none; }
+  #touch.on { display: block; }
+  .tb {
+    position: absolute; pointer-events: auto; touch-action: none; display: flex; align-items: center; justify-content: center;
+    font: inherit; font-size: 1em; color: #fff; background: rgba(40, 28, 60, .55);
+    border: .18em solid rgba(0, 0, 0, .8); border-radius: .3em; box-shadow: .15em .15em 0 rgba(0, 0, 0, .6);
+    text-shadow: .1em .1em 0 #000;
+  }
+  .tb.down { background: rgba(255, 190, 0, .65); color: #1a0d00; text-shadow: none; }
+  .tb.big { font-size: 1.6em; }
+  /* ---------- stage test ---------- */
+  #stages .stitle { font-size: 1.3em; margin: 0 0 .15em; }
+  #stages .row { margin-top: .3em; gap: .6em; }
+  #stageList {
+    display: grid; grid-template-columns: repeat(2, minmax(0, auto)); grid-template-rows: repeat(4, auto);
+    grid-auto-flow: column; gap: .1em 1.1em; padding: .35em .7em; margin: .2em; max-width: 100%;
+  }
+  .sgrp { display: flex; flex-wrap: wrap; align-items: center; gap: 0 .1em; margin: .05em 0; }
+  .sgrp b { width: 6.4em; font-weight: normal; color: #ffcc00; font-size: .72em; line-height: 1.15; text-shadow: .1em .1em 0 #000; }
+  .sgrp b small { display: block; color: #c8bce0; font-size: .85em; }
+  .sgrp .btn { font-size: .66em; padding: .15em .55em; margin: .12em; }
+  .sgrp .hint { font-size: .6em; margin-left: .2em; }
+  /* ---------- intro cutscene ---------- */
+  #intro { background: #000; padding: 0; z-index: 5; cursor: pointer; }
+  #introCv { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+  #introSkip { position: absolute; top: 3%; right: 2%; font-size: .75em; padding: .2em .6em; margin: 0; }
+  #introBox { position: absolute; left: 3%; right: 3%; bottom: 2%; margin: 0; min-height: 22%; padding: .4em .9em; background: rgba(42, 31, 61, .94); }
+  #introBox.narr { background: rgba(10, 6, 20, .9); }
+  #introName { color: #ffcc00; font-size: .9em; margin-bottom: .2em; text-shadow: .1em .1em 0 #000; }
+  #introText { font-size: 1.05em; line-height: 1.4; color: #fff; text-shadow: .08em .08em 0 #000; }
+  #introBox.narr #introText { color: #d8d0ea; font-style: italic; }
+  #introNext { position: absolute; right: .7em; bottom: .3em; color: #ffcc00; font-size: .8em; }
+  #err { position: fixed; left: 0; right: 0; bottom: 0; display: none; background: #600; color: #fff;
+    font-size: 12px; padding: 6px; white-space: pre-wrap; z-index: 9; max-height: 40%; overflow: auto; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="320" height="180"></canvas>
 
+  <!-- 타이틀 -->
+  <div id="title" class="ov on">
+    <h1>픽셀 카트</h1>
+    <div class="sub">PIXEL KART · 슈퍼마트 서킷</div>
+    <div class="hint" style="margin:-.5em 0 .5em">1 카트 레이스 → 2 창고 탈출 → 3 떨어뜨린 음식 줍기</div>
+    <button id="btnStart" class="btn blink">▶ 게임 시작 (Enter)</button>
+    <div class="row" style="margin-top:0">
+      <button id="btnIntro" class="btn alt" style="font-size:.85em">스토리 다시 보기</button>
+      <button id="btnStages" class="btn alt" style="font-size:.85em">스테이지 테스트 (T)</button>
+    </div>
+    <div class="panel">
+      <dl class="ctrl">
+        <dt>← → / A D</dt><dd>조향</dd>
+        <dt>↑ / W</dt><dd>가속</dd>
+        <dt>↓ / S</dt><dd>브레이크·후진</dd>
+        <dt>Space / Shift</dt><dd>드리프트 (드리프트로 부스터 게이지 충전)</dd>
+        <dt>Z</dt><dd>부스터 사용</dd>
+        <dt>X</dt><dd>고유 스킬</dd>
+        <dt>M</dt><dd>소리 켜기/끄기</dd>
+        <dt>R</dt><dd>재시작</dd>
+        <dt>Esc</dt><dd>타이틀</dd>
+      </dl>
+    </div>
+    <div id="best">최고 기록: 없음</div>
+  </div>
+
+  <!-- 카트 선택 -->
+  <div id="select" class="ov">
+    <div class="stitle">카트 선택</div>
+    <div id="cards"></div>
+    <div class="row">
+      <button id="btnBack" class="btn alt">← 타이틀</button>
+      <button id="btnGo" class="btn">출발!</button>
+    </div>
+    <div class="hint">방향키 / 클릭으로 선택 · Enter 로 출발</div>
+  </div>
+
+  <!-- 스테이지 테스트 -->
+  <div id="stages" class="ov">
+    <div class="stitle">스테이지 테스트</div>
+    <div class="panel" id="stageList">
+      <div class="sgrp"><b>오프닝</b>
+        <button class="btn alt" data-play="intro" data-scene="0">집</button>
+        <button class="btn alt" data-play="intro" data-scene="1">거리</button>
+        <button class="btn alt" data-play="intro" data-scene="2">정육 코너</button>
+        <button class="btn alt" data-play="intro" data-scene="3">출발선</button>
+      </div>
+      <div class="sgrp"><b>1스테이지<small>카트 레이스</small></b>
+        <button class="btn" data-race="1">레이스 바로 시작</button>
+        <span class="hint">F: 즉시 골인</span>
+      </div>
+      <div class="sgrp"><b>계산대 컷신<small>1등</small></b>
+        <button class="btn alt" data-play="checkout" data-scene="0" data-place="1">계산대</button>
+        <button class="btn alt" data-play="checkout" data-scene="1" data-place="1">창고</button>
+      </div>
+      <div class="sgrp"><b>계산대 컷신<small>4등</small></b>
+        <button class="btn alt" data-play="checkout" data-scene="0" data-place="4">계산대</button>
+        <button class="btn alt" data-play="checkout" data-scene="1" data-place="4">창고</button>
+      </div>
+      <div class="sgrp"><b>2스테이지<small>창고 탈출</small></b>
+        <button class="btn" data-stage="2">창고 탈출</button>
+      </div>
+      <div class="sgrp"><b>길 컷신</b>
+        <button class="btn alt" data-play="road" data-scene="0">탈출</button>
+        <button class="btn alt" data-play="road" data-scene="1">밤길</button>
+      </div>
+      <div class="sgrp"><b>3스테이지<small>음식 줍기</small></b>
+        <button class="btn" data-stage="3">음식 줍기</button>
+      </div>
+      <div class="sgrp"><b>집 컷신</b>
+        <button class="btn alt" data-play="home" data-scene="0">저녁 식사</button>
+      </div>
+    </div>
+    <div class="row">
+      <button id="btnStagesBack" class="btn alt">← 타이틀</button>
+    </div>
+    <div class="hint">컷신은 고른 장면부터 그 컷신 끝까지 재생 · 끝나면 이 메뉴로 · Esc 로 닫기</div>
+  </div>
+
+  <!-- 인트로 컷신 -->
+  <div id="intro" class="ov">
+    <canvas id="introCv" width="320" height="180"></canvas>
+    <button id="introSkip" class="btn alt">건너뛰기 (Esc)</button>
+    <div id="introBox" class="panel">
+      <div id="introName"></div>
+      <div id="introText"></div>
+      <div id="introNext" class="blink">▼ Enter</div>
+    </div>
+  </div>
+
+  <!-- 터치 컨트롤 (coarse pointer 전용) -->
+  <div id="touch">
+    <button class="tb big" data-k="left"  style="left:2%;  bottom:6%; width:14%; height:30%;">◀</button>
+    <button class="tb big" data-k="right" style="left:18%; bottom:6%; width:14%; height:30%;">▶</button>
+    <button class="tb" data-k="drift" style="left:2%;  bottom:39%; width:30%; height:14%;">드리프트</button>
+    <button class="tb" data-k="gas"   style="right:2%;  bottom:6%;  width:15%; height:30%;">가속</button>
+    <button class="tb" data-k="brake" style="right:19%; bottom:6%;  width:12%; height:18%;">브레이크</button>
+    <button class="tb" data-k="boost" style="right:2%;  bottom:39%; width:15%; height:16%;">부스터 Z</button>
+    <button class="tb" data-k="skill" style="right:19%; bottom:27%; width:12%; height:16%;">스킬 X</button>
+    <button class="tb" data-act="menu" style="left:1%; top:14%; width:7%; height:10%;">✕</button>
+    <button class="tb" data-act="retry" style="left:9%; top:14%; width:7%; height:10%;">R</button>
+  </div>
+</div>
+<div id="err"></div>
+
+<script src="js/config.js"></script>
+<script src="js/map.js"></script>
+<script src="js/karts.js"></script>
+<script src="js/skills.js"></script>
+<script src="js/intro.js"></script>
+<script src="js/stage2.js"></script>
+<script src="js/stage3.js"></script>
+<script src="js/main.js"></script>
+<script>
+  (function () {
+    var err = document.getElementById('err');
+    function show(m) { err.style.display = 'block'; err.textContent += m + '\n'; }
+    window.addEventListener('error', function (e) { show('오류: ' + (e.message || e) + (e.filename ? ' @' + e.filename.split('/').pop() + ':' + e.lineno : '')); });
+    try { PK.Game.init(); } catch (e) { show('초기화 오류: ' + (e && e.stack || e)); }
+  })();
+</script>
+</body>
+</html>
