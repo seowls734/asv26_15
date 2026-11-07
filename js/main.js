@@ -591,7 +591,7 @@ window.PK = window.PK || {};
   function randomKart() { return NORMAL_KARTS[(Math.random() * NORMAL_KARTS.length) | 0]; }
 
   // '게임 시작': kart select for the next map of the rotation
-  function startGame() { ghostMode = false; gp = null; pendingMap = baseMap; selectFrom = 'title'; goSelect(); }
+  function startGame() { ghostMode = false; gp = null; goMaps(); }   // map select first, then the kart
 
   function goSelect() {
     G.state = 'select'; G.attract = true;

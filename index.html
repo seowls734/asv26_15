@@ -197,7 +197,9 @@
     100% { opacity: 0; transform: translateX(-50%) translateY(-.6em); } }
   /* ---------- title extras / coins ---------- */
   #title .trow .btn { font-size: .8em; padding: .25em .7em; min-height: 2.3em; }
-  #btnShop, #btnDex, #btnAch, #btnRank, #btnSettings { font-size: .95em; min-height: 2.5em; white-space: nowrap; }
+  .tbar { display: grid; grid-template-columns: repeat(5, 4.6em); gap: .35em; margin-top: .45em; }
+  .tbar .btn { margin: 0; padding: .3em 0 .25em; font-size: .82em; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: .1em; white-space: nowrap; }
+  .tbar .btn i { font-style: normal; font-size: 1.45em; line-height: 1; }
   /* ---------- 랭킹 ---------- */
   #rankTabs .btn { font-size: .7em; padding: .2em .6em; margin: .12em; }
   #rankList { width: 100%; max-width: 36em; margin: .3em 0; max-height: 58vh; overflow-y: auto; }
@@ -296,7 +298,6 @@
   <div id="modes" class="ov">
     <div class="stitle">🎮 게임 모드</div>
     <div class="mlist">
-      <button id="btnMaps" class="btn">🗺 맵 골라서 달리기 (L)</button>
       <button id="btnGP" class="btn">🏆 그랑프리 · 4맵 점수 대결</button>
       <button id="btnGhost" class="btn">👻 고스트 모드 · 이전의 나와 대결 (G)</button>
       <button id="btnOnline" class="btn">🌐 2인용 (온라인)</button>
@@ -321,12 +322,12 @@
         <div id="playerTitle"></div>
         <button id="btnStart" class="btn blink">▶ 게임 시작 (Enter)</button>
         <button id="btnModes" class="btn">🎮 다른 모드 (N)</button>
-        <div class="row">
-          <button id="btnShop" class="btn alt">🛒 상점 (S)</button>
-          <button id="btnDex" class="btn alt">📖 도감 (D)</button>
-          <button id="btnAch" class="btn alt">🏅 업적 (H)</button>
-          <button id="btnRank" class="btn alt">🏆 랭킹 (K)</button>
-          <button id="btnSettings" class="btn alt">⚙ 설정 (O)</button>
+        <div class="tbar">
+          <button id="btnShop" class="btn alt"><i>🛒</i>상점</button>
+          <button id="btnDex" class="btn alt"><i>📖</i>도감</button>
+          <button id="btnAch" class="btn alt"><i>🏅</i>업적</button>
+          <button id="btnRank" class="btn alt"><i>🏆</i>랭킹</button>
+          <button id="btnSettings" class="btn alt"><i>⚙</i>설정</button>
         </div>
         <div id="best">최고 기록: 없음</div>
         <div id="daily"></div>
