@@ -366,7 +366,7 @@ window.PK = window.PK || {};
       prev: { drift: false, boost: false, skill: false },
       // internal (underscore = private to karts.js)
       combo: 0, slipT: 0,   // drift combo step (0 = none) / slipstream charge time (>= SLIP_CHARGE = ready)
-      _hopV: 0, _bumpT: 0, _obsT: 0, obsHits: 0, _onPad: false, _puddle: false, _topV: 0, _sinceDrift: 99
+      _hopV: 0, _bumpT: 0, _obsT: 0, obsHits: 0, _obsLast: null, _obsAge: 99, _obsRep: 0, _obsPass: 0, _onPad: false, _puddle: false, _topV: 0, _sinceDrift: 99
     };
   }
 
@@ -418,6 +418,8 @@ window.PK = window.PK || {};
     if (k.boostT > 0) k.boostT = Math.max(0, k.boostT - dt);
     if (k._bumpT > 0) k._bumpT -= dt;
     if (k._obsT > 0) k._obsT -= dt;
+    if (k._obsAge < 99) k._obsAge += dt;
+    if (k._obsPass > 0) k._obsPass -= dt;
 
     // ---- surface checks ----
     let inPuddle = false;
@@ -717,6 +719,7 @@ window.PK = window.PK || {};
       if (k.fx.phase > 0 || k.fx.ghost > 0) continue;
       for (let j = 0; j < obs.length; j++) {
         const o = obs[j], rr = o.r + KART_R;
+        if (k._obsPass > 0 && k._obsLast === o) continue;   // AI rescue: wedged on this one, let it slip past
         let nx = k.x - o.x, ny = k.y - o.y;
         const dsq = nx * nx + ny * ny;
         if (dsq >= rr * rr) continue;
@@ -732,9 +735,10 @@ window.PK = window.PK || {};
         setVel(k, tx * keep - nx * vn * OBS_BOUNCE + ovx, ty * keep - ny * vn * OBS_BOUNCE + ovy);
         if (hard && -vn > 12) {
           k._obsT = OBS_CD; k.obsHits = (k.obsHits || 0) + 1; k.combo = 0;
-          if (k.ai) {   // recover toward the open road: centre-side for kerb obstacles, else the side we bounced to
-            const mid = (o.lo + o.hi) / 2;
-            k.ai.avoidO = o; k.ai.avoidS = Math.abs(mid) > 3 ? (mid > 0 ? -1 : 1) : (k.lat > mid ? 1 : -1);
+          k._obsRep = k._obsLast === o && k._obsAge < 4 ? k._obsRep + 1 : 1; k._obsLast = o; k._obsAge = 0;
+          if (!k.isPlayer && k._obsRep >= 3) { k._obsPass = 1.2; k._obsRep = 0; }
+          if (k.ai) {
+            k.ai.avoidO = o; k.ai.avoidS = k.lat > (o.lo + o.hi) / 2 ? 1 : -1;   // slide off on the side we hit it
           }
           if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; }
           const G = PK.Game;
@@ -769,6 +773,7 @@ window.PK = window.PK || {};
       const wl = cur < 0 ? T.BARRIER - 6 : half - 2, wr = cur > 0 ? T.BARRIER - 6 : half - 2;
       const roomL = best.lo + wl, roomR = wr - best.hi;
       ai.avoidO = o; ai.avoidS = (cur > 0 ? roomR : roomL) >= need ? cur : (roomR > roomL ? 1 : -1);
+      if (best.m < 15 && Math.abs(mid) > 3 && cur * mid > 0) ai.avoidS = cur;   // already out on the shoulder beside it: stay there
     }
     const lim = (ai.avoidS > 0) === (k.lat > (o.lo + o.hi) / 2) ? T.BARRIER - 6 : half - 3;
     const nl = clamp(ai.avoidS > 0 ? best.hi + 1 : best.lo - 1, -lim, lim);
@@ -893,7 +898,7 @@ window.PK = window.PK || {};
       // hold the drift while the curve continues; release on straight or big charge
       let near = 0;
       for (let m = 0; m < 10; m += 2) near += angDiff(T.TAN[wrapI(k.idx + m, N)], T.TAN[wrapI(k.idx + m + 2, N)]);
-      const keep = Math.abs(near) > 0.1 && near * k.driftDir > 0 && k.charge < 2.4 && Math.abs(k.lat) < T.OFFROAD_D - 4;
+      const keep = Math.abs(near) > 0.1 && near * k.driftDir > 0 && k.charge < 2.4 && Math.abs(k.lat) < T.OFFROAD_D - 4 && !(av && av.m < look + 6);
       out.drift = keep;
       if (!keep) ai.wantDrift = false;
       out.gas = true; out.brake = false;
