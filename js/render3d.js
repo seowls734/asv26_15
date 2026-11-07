@@ -120,7 +120,9 @@ window.PK = window.PK || {};
       wrapEl = wrap;
       canvas = document.createElement('canvas');
       canvas.id = 'game3d';
-      canvas.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;display:none;';
+      // z-index -1: behind the 2D canvas (HUD) and every menu / button overlay (#wrap's transform makes it
+      // its own stacking context, so this stays inside the game box)
+      canvas.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;display:none;z-index:-1;pointer-events:none;';
       wrap.insertBefore(canvas, under || wrap.firstChild);
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
       const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
