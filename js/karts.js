@@ -95,32 +95,94 @@ window.PK = window.PK || {};
     '..mmD' + rep('.', 38) + 'DmM..'
   ];
   // driver from behind, 26 wide. R hair, r hair shade, k skin, K skin shade, S shirt, s collar, t shirt shade.
+  // R hair, r hair shade, h hair shine, k skin, K skin shade, e ear (inner), S shirt, s collar,
+  // t shirt shade, w shirt highlight, n seam / fold. Light from the upper left.
   const DRV_HEAD = [
-    '.........rRRRRRRr.........',
-    '.......rRRRRRRRRRRr.......',
-    '......rRRRRRRRRRRRRr......',
-    '......RRRRRRRRRRRRRR......',
-    '.....rRRRRRRRRRRRRRRr.....',
-    '.....RRRRRRRRRRRRRRRR.....',
-    '.....RRRRRRRRRRRRRRRR.....',
+    '.........rrRRRRrr.........',
+    '.......rRRRhhhRRRRr.......',
+    '......rRRhhhhhhRRRRr......',
+    '......RRhhhRRRRRRRRR......',
+    '.....rRhhRRRRRRRRRRRr.....',
+    '.....RRhRRRRRRRRRRRRR.....',
     '....kRRRRRRRRRRRRRRRRk....',
-    '....KRRRRRRRRRRRRRRRRK....',
-    '.....rRRRRRRRRRRRRRRr.....',
+    '...kkRRRRRRRRRRRRRRRRkk...',
+    '...KeRRRRRRRRRRRRRRRReK...',
+    '....KrRRRRRRRRRRRRRRrK....',
     '.....rrRRRRRRRRRRRRrr.....',
-    '......rrrRRRRRRRRrrr......',
-    '.......kkkkkkkkkkkk.......',
+    '......rrrrRRRRRRrrrr......',
+    '.......KkkkkkkkkkkK.......',
     '........KKKKKKKKKK........'
   ];
   const DRV_BODY = [
-    '....SSSSSSssssssSSSSSS....',
-    '..SSSSSSSSSSSSSSSSSSSSSS..',
-    '.tSSSSSSSSSSSSSSSSSSSSSSt.',
-    'tSSSSSSSSSSSSSSSSSSSSSSSSt',
-    'tSSSSSSSSSSSSSSSSSSSSSSSSt',
-    'ttSSSSSSSSSSSSSSSSSSSSSStt',
-    'ttSSSSSSSSSSSSSSSSSSSSSStt',
-    'ttSSSSSSSSSSSSSSSSSSSSSStt'
+    '....SSSSSsskkkkssSSSSS....',
+    '..wwwSSSnSSSSSSSSnSSSSSt..',
+    '.twwSSSSnSSSSSSSSnSSSSStt.',
+    'twSSSSSSnSSSSSSSSnSSSSSStt',
+    'twSSSSSSnSSSSSSSSnSSSSSStt',
+    'ttSSSSSSntSSSSSSSnSSSSSttt',
+    'ttSSSSSStSSSSSSSStSSSSSttt',
+    'tttSSSSSSSSSSSSSSSSSSSSttt'
   ];
+  // hairstyles for the everyday shoppers: ponytail (T hair tie) and a cap (C cap, c shade, L shine, b button)
+  const PONY_HEAD = [
+    '.........rrRRRRrr.........',
+    '.......rRRRhhhRRRRr.......',
+    '......rRRhhhhhhRRRRr......',
+    '......RRhhhrTTrRRRRR......',
+    '.....rRhhRRrhRrRRRRRr.....',
+    '.....RRhRRrRhRRrRRRRR.....',
+    '....kRRRRRrRhRRrRRRRRk....',
+    '...kkRRRRRrhRRRrRRRRRkk...',
+    '...KeRRRRRrRhRRrRRRRReK...',
+    '....KrRRRRRrRRrRRRRRrK....',
+    '.....rrRRRRrRRrRRRRrr.....',
+    '......rrrrRrRRrRrrrr......',
+    '.......KkkkrRRrkkkK.......',
+    '........KKKrRRrKKK........'
+  ];
+  const PONY_BODY = [
+    '....SSSSSssrRRrssSSSSS....',
+    '..wwwSSSnSSrRRrSSnSSSSSt..',
+    '.twwSSSSnSSSRrSSSnSSSSStt.',
+    'twSSSSSSnSSSrrSSSnSSSSSStt',
+    'twSSSSSSnSSSSSSSSnSSSSSStt',
+    'ttSSSSSSntSSSSSSSnSSSSSttt',
+    'ttSSSSSStSSSSSSSStSSSSSttt',
+    'tttSSSSSSSSSSSSSSSSSSSSttt'
+  ];
+  const CAP_HEAD = [
+    '.........ccCbbCcc.........',
+    '.......cLLLCCCCCCCc.......',
+    '......cLLLLCCCCCCCCc......',
+    '......CCCCCccccCCCCC......',
+    '.....cCCCCCRRRRCCCCCc.....',
+    '.....CCCCCCcbbcCCCCCC.....',
+    '....kRRRRRRRRRRRRRRRRk....',
+    '...kkRRRRRRRRRRRRRRRRkk...',
+    '...KeRRRRRRRRRRRRRRRReK...',
+    '....KrRRRRRRRRRRRRRRrK....',
+    '.....rrRRRRRRRRRRRRrr.....',
+    '......rrrrRRRRRRrrrr......',
+    '.......KkkkkkkkkkkK.......',
+    '........KKKKKKKKKK........'
+  ];
+  const BUN_HEAD = [
+    '..........rRRRRr..........',
+    '..........RhhRRR..........',
+    '.......rRRrRRRRrRRr.......',
+    '......RRhhhRRRRRRRRR......',
+    '.....rRhhRRRRRRRRRRRr.....',
+    '.....RRhRRRRRRRRRRRRR.....',
+    '....kRRRRRRRRRRRRRRRRk....',
+    '...kkRRRRRRRRRRRRRRRRkk...',
+    '...KeRRRRRRRRRRRRRRRReK...',
+    '....KrRRRRRRRRRRRRRRrK....',
+    '.....rrRRRRRRRRRRRRrr.....',
+    '......rrrrRRRRRRrrrr......',
+    '.......KkkkkkkkkkkK.......',
+    '........KKKKKKKKKK........'
+  ];
+  const STYLES = { pony: [PONY_HEAD, PONY_BODY], cap: [CAP_HEAD, DRV_BODY], bun: [BUN_HEAD, DRV_BODY] };
   const DRV_X = (SW - 26) >> 1;
 
   // character drivers (26 wide, same row counts as DRV_HEAD / DRV_BODY).
@@ -213,7 +275,9 @@ window.PK = window.PK || {};
   const SPR_PHASE = []; // SPR_PHASE[defIndex] = faded [l, c, r] for karts with the 'phase' skill (else undefined)
   // drivers: [hair, shirt, skin]. ME matches PAL_ME in intro.js.
   const ME = ['#3b2a20', '#7d8592', '#f1c9a0'];
-  const SHOPPERS = [['#1c1c22', '#c8504a'], ['#7a5232', '#3a8a5a'], ['#d8b860', '#4a6ab8'], ['#8a8a90', '#b85a9a'], ['#2a1a10', '#e0a030'], ['#5a3420', '#5a5a66']];
+  // shoppers: [hair, shirt, skin, hairstyle, cap colour]
+  const SHOPPERS = [['#1c1c22', '#c8504a', '#f1c9a0', 'pony'], ['#7a5232', '#3a8a5a', '#d9a878', 'cap', '#e0e0e8'], ['#d8b860', '#4a6ab8', '#f6d6b8', 'bun'],
+    ['#8a8a90', '#b85a9a', '#e9bf95', 'cap', '#3a5aa8'], ['#2a1a10', '#e0a030', '#b07a52', ''], ['#5a3420', '#5a5a66', '#e2b48a', 'pony']];
   const JOBS = [];    // {cv, d, drv, dx, fcv?} — repainted when the cart image arrives (drv null = empty cart, fcv = faded copy)
   const SPR_PHASE_ME = []; // player copy of SPR_PHASE (follows the player body)
   const ME_JOBS = [];   // ME_JOBS[defIndex] = paint jobs of the player frames (repainted by setPlayerBody)
@@ -241,7 +305,10 @@ window.PK = window.PK || {};
   }
   function drvPal(drv) {
     const U = PK.U, skin = drv[2] || '#e9bf95';
-    return { R: drv[0], r: U.darken(drv[0], 0.7), k: skin, K: U.darken(skin, 0.86), S: drv[1], s: U.darken(drv[1], 0.8), t: U.darken(drv[1], 0.78) };
+    const cap = drv[4] || U.darken(drv[1], 0.7);
+    return { R: drv[0], r: U.darken(drv[0], 0.7), h: mixW(drv[0], 0.28), k: skin, K: U.darken(skin, 0.86), e: U.darken(skin, 0.76),
+      S: drv[1], s: U.darken(drv[1], 0.8), t: U.darken(drv[1], 0.78), w: mixW(drv[1], 0.22), n: U.darken(drv[1], 0.88),
+      T: '#ff5a8a', C: cap, c: U.darken(cap, 0.75), L: mixW(cap, 0.3), b: mixW(cap, 0.45) };
   }
 
   // stand-in cart (before the image loads / if it fails)
@@ -263,7 +330,8 @@ window.PK = window.PK || {};
     if (!j.drv) return;
     const dx = j.dx;
     const C = j.d.ch && CHARS[j.d.ch];
-    const dp = C ? C.pal : drvPal(j.drv), hd = C ? C.head : DRV_HEAD, bd = C ? C.body : DRV_BODY;
+    const sty = !C && STYLES[j.drv[3]];
+    const dp = C ? C.pal : drvPal(j.drv), hd = C ? C.head : sty ? sty[0] : DRV_HEAD, bd = C ? C.body : sty ? sty[1] : DRV_BODY;
     if (C && C.split) {   // chromatic ghost copies, offset left/right
       const one = (col) => { const p = {}; for (const ch in dp) p[ch] = col; return p; };
       const pm = one('rgba(255,40,200,0.55)'), pc = one('rgba(40,230,255,0.55)');
@@ -451,7 +519,7 @@ window.PK = window.PK || {};
   const DECO_CACHE = {};   // decoSprite canvases by 'kind|id|defIndex|body'
 
   // head outline per driver type: EXT[key][row] = [x0, x1] (head-local columns) or null
-  const HEAD_RE = { hero: /[RrkK]/, vamp: /[HhEe]/, ghost: /[oWw]/ };
+  const HEAD_RE = { hero: /[RrhkKe]/, vamp: /[HhEe]/, ghost: /[oWw]/ };
   const EXT = {};
   function headExt(key) {
     if (EXT[key]) return EXT[key];

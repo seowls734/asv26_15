@@ -205,6 +205,81 @@ window.PK = window.PK || {};
   }
 
   // ---------------------------------------------------------------------------
+  // 👻 ghost race: the player's best run on each map is recorded (position + steering every
+  // GH_DT s) and replayed as a see-through kart in later races. Off in online / test races.
+  // Saved as 'pk_ghostrun_m<id>' = { t: finish time, d: defIndex, p: [x, y, steer, ...] }.
+  // ---------------------------------------------------------------------------
+  const LS_GHOST_ON = 'pk_ghost_on', GH_DT = 0.1;
+  const ghostKey = (id) => 'pk_ghostrun_m' + id;
+  let ghostOn = true, ghRec = null, ghRun = null, ghKart = null;
+  function ghostLoad(id) {
+    try {
+      const o = JSON.parse(lsGet(ghostKey(id)) || 'null');
+      if (o && o.t > 0 && Array.isArray(o.p) && o.p.length >= 6) return o;
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+  function ghostBegin(attract) {
+    ghRec = null; ghRun = null; ghKart = null;
+    if (attract || G.online || testMode) return;
+    ghRec = [];
+    const o = ghostOn ? ghostLoad(raceMap) : null;
+    if (!o) return;
+    ghRun = o;
+    const def = PK.Karts.DEFS[o.d] ? o.d : 0;
+    // drawn with the player's own sprites (isPlayer) but never added to G.karts: no collisions / standings
+    ghKart = { ghostRun: true, isPlayer: true, defIndex: def, def: PK.Karts.DEFS[def], fx: {}, x: o.p[0], y: o.p[1],
+      a: 0, ma: 0, v: 0, steerIn: 0, drift: false, driftDir: 0, hop: 0, alpha: 0.45 };
+  }
+  function ghostRecord() {
+    const k = G.player;
+    if (!ghRec || !k || k.finished) return;
+    while (ghRec.length / 3 * GH_DT <= G.raceTime) {
+      ghRec.push(Math.round(k.x * 10) / 10, Math.round(k.y * 10) / 10, Math.round((k.steerIn || 0) * 100) / 100);
+    }
+  }
+  function ghostSave(k) {
+    if (!ghRec || G.online || testMode || ghRec.length < 6) return false;
+    const old = ghostLoad(raceMap);
+    if (old && !(k.finishTime < old.t)) return false;
+    lsSet(ghostKey(raceMap), JSON.stringify({ t: Math.round(k.finishTime * 100) / 100, d: k.defIndex, p: ghRec }));
+    return true;
+  }
+  // move the ghost to where the recorded run was at this race time; false = nothing to show
+  function ghostPlace() {
+    if (!ghKart || !ghRun || G.online) return false;
+    const st = G.state;
+    if (st !== 'countdown' && st !== 'race' && st !== 'finished') return false;
+    const P = ghRun.p, n = P.length / 3, tt = st === 'countdown' ? 0 : G.raceTime;
+    if (tt > ghRun.t + 0.6) return false;            // its run is over: it vanishes past the line
+    const f = Math.min(n - 1.001, tt / GH_DT), i = f | 0, u = f - i, j = Math.min(n - 1, i + 1);
+    const x = P[i * 3] + (P[j * 3] - P[i * 3]) * u, y = P[i * 3 + 1] + (P[j * 3 + 1] - P[i * 3 + 1]) * u;
+    const dx = x - ghKart.x, dy = y - ghKart.y;
+    if (dx * dx + dy * dy > 0.0004) ghKart.a = ghKart.ma = Math.atan2(dy, dx);
+    else if (i === 0 && n > 2) {
+      // still on the grid: face along the track like the real karts
+      let m = 1; while (m < n - 1 && Math.abs(P[m * 3] - P[0]) + Math.abs(P[m * 3 + 1] - P[1]) < 0.5) m++;
+      ghKart.a = ghKart.ma = Math.atan2(P[m * 3 + 1] - P[1], P[m * 3] - P[0]);
+    }
+    ghKart.x = x; ghKart.y = y;
+    ghKart.steerIn = P[i * 3 + 2] + (P[j * 3 + 2] - P[i * 3 + 2]) * u;
+    ghKart.alpha = 0.38 + Math.sin(G.time * 5) * 0.08;
+    return true;
+  }
+  // console / tests: PK.Game.ghostInfo()
+  G.ghostInfo = () => ({ on: ghostOn, rec: ghRec ? ghRec.length / 3 : -1, run: ghRun ? ghRun.t : 0, at: ghKart ? [Math.round(ghKart.x), Math.round(ghKart.y)] : null });
+  function refreshGhostBtn() {
+    const b = document.getElementById('btnGhost');
+    if (b) b.textContent = '👻 고스트 기록: ' + (ghostOn ? '켬' : '끔');
+  }
+  function toggleGhost() {
+    ghostOn = !ghostOn;
+    lsSet(LS_GHOST_ON, ghostOn ? '1' : '0');
+    refreshGhostBtn();
+    toast(ghostOn ? 'GHOST ON' : 'GHOST OFF');
+  }
+
+  // ---------------------------------------------------------------------------
   // init
   // ---------------------------------------------------------------------------
   function init() {
@@ -261,6 +336,7 @@ window.PK = window.PK || {};
       mtest: document.getElementById('mtest'), mtList: document.getElementById('mtList'),
       ovt: document.getElementById('ovt'),
     };
+    ghostOn = lsGet(LS_GHOST_ON) !== '0'; refreshGhostBtn();
     calm = lsGet(LS_CALM) !== '0';   // calm (no shake / flicker) is on unless the player turned it off
     easy = lsGet(LS_EASY) !== '0';   // easy controls too
     // console/test access to the wallet + shop
@@ -1206,6 +1282,7 @@ window.PK = window.PK || {};
     G.karts = karts;
     G.standings = karts.slice();
     G.raceTime = 0;
+    ghostBegin(attract);
     attractT = 0; finT = 0; newRecord = false; newLapRecord = false;
     toastT = 0; bannerT = 0; shakeT = 0;
     posShown = -1; posCand = -1; posCandT = 0; posPulse = 0; posFlash = 0; ovtCool = 0; hideOvertake();
@@ -1277,6 +1354,7 @@ window.PK = window.PK || {};
     if (bl > 0 && (!(best.lap > 0) || bl < best.lap)) { best.lap = bl; newLapRecord = true; }
     if (testMode) { newRecord = false; newLapRecord = false; }
     if (newRecord || newLapRecord) lsSet(bestKey(raceMap), JSON.stringify(best));
+    if (ghostSave(k)) G.dbg.ghostSaved = (G.dbg.ghostSaved || 0) + 1;
     bankCoins();
     if (!testMode) rollGhostReward(k);
     if (!testMode) achOnFinish(k);
@@ -1407,6 +1485,7 @@ window.PK = window.PK || {};
       else if (c === 'KeyH') { uiBeep(0); goAch(); }
       else if (c === 'KeyK') { uiBeep(0); goRank(); }
       else if (c === 'KeyV') toggleCalm();
+      else if (c === 'KeyG') { uiBeep(0); toggleGhost(); }
     } else if (st === 'rank') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
       else if (c === 'ArrowLeft' || c === 'ArrowRight') { const n = MAPS().length; rankMap = (rankMap + (c === 'ArrowRight' ? 1 : n - 1)) % n; uiBeep(0); buildRank(); }
@@ -1487,6 +1566,7 @@ window.PK = window.PK || {};
     on(el.btnItem, () => { ensureAudio(); cycleItem(); });
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
+    on(document.getElementById('btnGhost'), () => { ensureAudio(); toggleGhost(); });
     on(el.btnTest, () => { ensureAudio(); uiBeep(1); goTest(); });
     on(el.btnMapTest, () => { ensureAudio(); uiBeep(1); goMapTest(); });
     const byId = (id) => document.getElementById(id);
@@ -1683,7 +1763,7 @@ window.PK = window.PK || {};
       G.raceTime += dt;
       if (st === 'finished') finT += dt;
       simulate(dt);
-      if (st === 'race') { updateSale(dt); trackPos(dt); refreshTb(); }
+      if (st === 'race') { updateSale(dt); trackPos(dt); refreshTb(); ghostRecord(); }
       const pl = G.player;
       if (pl && st === 'race') {
         if ((pl.boostT || 0) > lastBoostT + 0.3) { speedBurst = 0.35; boostKick(0.22); }   // a fresh boost: speed-line burst + kick
@@ -1788,6 +1868,7 @@ window.PK = window.PK || {};
     for (let i = 0; i < props.length; i++) { const p = props[i]; if (p.spr) n = addBill(n, p.x, p.y, 0, p.spr, p.w, null); }
     const ks = G.karts;
     for (let i = 0; i < ks.length; i++) { const k = ks[i]; n = addBill(n, k.x, k.y, 0, null, KART_W, k); }
+    if (ghostPlace()) n = addBill(n, ghKart.x, ghKart.y, 0, null, KART_W, ghKart);
     const ss = PK.Skills.sprites() || [];
     for (let i = 0; i < ss.length; i++) { const o = ss[i]; if (o && o.spr) n = addBill(n, o.x, o.y, o.h, o.spr, o.w, null); }
     vis.length = n;
@@ -1844,6 +1925,10 @@ window.PK = window.PK || {};
       ctx.scale(sx, 1);
       ctx.drawImage(spr, -Math.round(sw / 2), -Math.round(sh), Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh)));
       ctx.restore();
+    }
+    if (k.ghostRun) {   // a 'GHOST' tag over the best-run kart (only when near enough to read)
+      if (sw > 18) { const a = ctx.globalAlpha; ctx.globalAlpha = Math.min(1, a * 2); textC('GHOST', Math.round(r.sx), Math.round(r.gy - sw * 1.3 - 7), 1, '#bfe4ff', true); ctx.globalAlpha = a; }
+      return;
     }
     PK.Karts.drawFx(ctx, k, r.sx, r.gy, sw);
   }
