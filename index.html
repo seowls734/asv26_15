@@ -173,7 +173,7 @@
     100% { opacity: 0; transform: translateX(-50%) translateY(-.6em); } }
   /* ---------- title extras / coins ---------- */
   #title .trow .btn { font-size: .8em; padding: .25em .7em; min-height: 2.3em; }
-  #btnShop, #btnDex, #btnAch, #btnRank { font-size: .95em; min-height: 2.5em; }
+  #btnShop, #btnDex, #btnAch, #btnRank, #btnTest { font-size: .95em; min-height: 2.5em; }
   /* ---------- 랭킹 ---------- */
   #rankTabs .btn { font-size: .7em; padding: .2em .6em; margin: .12em; }
   #rankList { width: 100%; max-width: 30em; margin: .3em 0; }
@@ -262,6 +262,7 @@
           <button id="btnDex" class="btn alt">📖 음식 도감 (D)</button>
           <button id="btnAch" class="btn alt">🏅 업적 (H)</button>
           <button id="btnRank" class="btn alt">🏆 랭킹 (K)</button>
+          <button id="btnTest" class="btn alt">🧪 캐릭터 테스트 (T)</button>
         </div>
         <div class="row trow">
           <button id="btnEasy" class="btn alt">🎮 쉬운 조작: 켬</button>
@@ -367,9 +368,9 @@
     <div id="ctMaps"></div>
     <div class="row trow">
       <button id="ctBack" class="btn alt">← 뒤로</button>
-      <button id="ctGhost" class="btn alt">👻 유령 해금</button>
-      <button id="ctGlitch" class="btn alt">🌀 글리치 해금</button>
-      <button id="ctCoins" class="btn alt">🍎 +10</button>
+      <button id="ctGhost" class="btn alt" style="display:none">👻 유령 해금</button>
+      <button id="ctGlitch" class="btn alt" style="display:none">🌀 글리치 해금</button>
+      <button id="ctCoins" class="btn alt" style="display:none">🍎 +10</button>
       <button id="ctStart" class="btn">▶ 테스트 출발</button>
     </div>
     <div class="hint">잠긴 캐릭터도 바로 테스트할 수 있어요 (기록·해금 없음) · Enter 출발 · Esc 뒤로</div>
