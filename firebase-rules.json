@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "scores": {
+      "$map": {
+        ".read": true,
+        ".indexOn": ["time", "name"],
+        "$id": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['name','time','kart','at']) && newData.child('name').isString() && newData.child('name').val().length <= 12 && newData.child('time').isNumber() && newData.child('time').val() > 5 && newData.child('time').val() < 900"
+        }
+      }
+    },
+    "owners": {
+      "$name": {
+        ".read": false,
+        ".write": "!data.exists() || data.child('uid').val() === newData.child('uid').val() || data.child('free').val() === true",
+        ".validate": "newData.hasChildren(['uid','free','at']) && newData.child('uid').isString() && newData.child('uid').val().length >= 12 && newData.child('uid').val().length <= 40 && newData.child('free').isBoolean() && newData.child('at').isNumber() && $name.length <= 12"
+      }
+    }
+  }
+}

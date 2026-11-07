@@ -1829,7 +1829,15 @@ window.PK = window.PK || {};
     on(el.btnAchBack, () => { uiBeep(0); goTitle(); });
     on(el.btnRank, () => { ensureAudio(); uiBeep(1); goRank(); });
     on(el.btnRankBack, () => { uiBeep(0); goTitle(); });
-    on(el.btnNick, () => { if (PK.Rank && el.rankNick) { PK.Rank.setNick(el.rankNick.value); uiBeep(1); buildRank(); } });
+    on(el.btnNick, async () => {
+      if (!PK.Rank || !el.rankNick) return;
+      const b = el.btnNick; b.disabled = true;
+      const r = await PK.Rank.setNick(el.rankNick.value);
+      b.disabled = false;
+      el.rankNick.value = r.name;
+      if (r.ok) { uiBeep(1); buildRank(); toast('NAME SAVED'); }
+      else { uiBeep(0); if (el.rankInfo) el.rankInfo.textContent = '⚠ ' + r.msg + ' · 지금 이름 ' + r.name; }
+    });
     on(el.btnItem, () => { ensureAudio(); cycleItem(); });
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
