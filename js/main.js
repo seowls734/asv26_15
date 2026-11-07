@@ -34,6 +34,8 @@ window.PK = window.PK || {};
     init, onLap, onFood, sfx, toast,
     // debug helper (console): start a race on any map directly, e.g. PK.Game.debugRace(4)
     debugRace(id) { startRace(selIdx, id | 0, false); },
+    // tests / console: advance the game by n fixed steps without waiting for frames
+    debugStep(n) { for (let i = 0; i < (n | 0); i++) step(1 / 60); },
   };
 
   // ---------------------------------------------------------------------------
@@ -270,7 +272,13 @@ window.PK = window.PK || {};
   // console / tests: PK.Game.ghostInfo()
   G.ghostInfo = () => ({ mode: ghostMode, rec: ghRec ? ghRec.length / 3 : -1, run: ghRun ? ghRun.t : 0, at: ghKart ? [Math.round(ghKart.x), Math.round(ghKart.y)] : null });
   // title '👻 고스트 모드': pick a map, then a kart, then race the ghost
-  function goGhostMode() { ghostMode = true; goMaps(); }
+  // lobby sub-menus: '🎮 다른 모드' (maps / GP / ghost / online) and '⚙ 설정'
+  function goModes() { G.state = 'modes'; G.attract = true; showOnly('modes'); }
+  function goSettings() {
+    G.state = 'settings'; G.attract = true; showOnly('settings');
+    const be = document.getElementById('btnEnding'); if (be) be.style.display = PK.Intro && PK.Intro.endingSeen && PK.Intro.endingSeen() ? '' : 'none';
+  }
+  function goGhostMode() { ghostMode = true; gp = null; goMaps(); }
   // finish in ghost mode: who won? (old = the ghost's time before this run, 0 = no ghost yet)
   function ghostResult(k, old) {
     const b = el.mapBanner;
@@ -382,6 +390,165 @@ window.PK = window.PK || {};
   function show(e, on) { if (e && e.classList) e.classList.toggle('on', !!on); }
   const RACE_STATES = { countdown: 1, race: 1, finished: 1 };
   // one place that decides which DOM overlay is visible
+  // ---------------------------------------------------------------------------
+  // 🎓 tutorial (first race only), 📅 daily challenge, 🏆 Grand Prix, 🏁 ending cutscene
+  // ---------------------------------------------------------------------------
+  // per-race counters for the daily challenge
+  let rstat = { mt: 0, wall: 0, ovt0: 0 }, prevMt = false;
+  function rstatReset() { rstat = { mt: 0, wall: 0, ovt0: G.dbg.overtakes | 0 }; prevMt = false; }
+  function rstatTick() {
+    const p = G.player;
+    if (!p) return;
+    const mt = (p._mtBurst || 0) > 0;
+    if (mt && !prevMt) rstat.mt++;
+    prevMt = mt;
+  }
+
+  // ---- 🎓 tutorial: short hints on the first race, each until done (or a timeout)
+  const LS_TUT = 'pk_tut_v1';
+  let tut = -1, tutT = 0, tutHold = 0;
+  function TUT() {
+    const k = !coarse;
+    return [
+      { msg: k ? '🚀 GO! 가 뜨기 직전에 ↑ 를 누르면 로켓 스타트!' : '🚀 GO! 가 뜨기 직전에 가속을 누르면 로켓 스타트!', state: 'countdown', done: () => false, max: 99 },
+      { msg: k ? '↑ 가속 · ← → 방향 · ↓ 브레이크' : '조이스틱으로 가속하고 방향을 바꿔요', done: (p) => Math.abs(p.v) > 50, hold: 1, max: 8 },
+      { msg: k ? '🌀 커브에서 Space 를 누른 채 방향키 → 드리프트! 불꽃이 커지면 놓아서 미니 터보' : '🌀 커브에서 드리프트 버튼을 누른 채 꺾기 → 불꽃이 커지면 놓아서 미니 터보', done: () => rstat.mt > 0, max: 16 },
+      { msg: k ? '⚡ 부스터 게이지가 차면 Z 로 부스터!' : '⚡ 부스터 게이지가 차면 부스터 버튼!', done: (p) => p.boostT > 0.6 && !(p._mtBurst > 0), max: 10 },
+      { msg: '🍎 길 위의 음식을 먹으면 코인! (한 판에 10개까지)', done: () => foodRace > 0, max: 8 },
+      { msg: k ? '✨ X 는 캐릭터마다 다른 고유 스킬 · 벽과 풀밭은 느려져요!' : '✨ 스킬 버튼은 캐릭터마다 달라요 · 벽과 풀밭은 느려져요!', done: () => false, max: 5 },
+    ];
+  }
+  function tutStart() {
+    tut = -1; tutT = 0;
+    if (G.online || testMode || lsGet(LS_TUT) === '1') { tutShow(''); return; }
+    tutNext();
+  }
+  function tutNext() {
+    const L = TUT();
+    tut++; tutT = 0; tutHold = 0;
+    if (tut >= L.length) { tut = -1; lsSet(LS_TUT, '1'); tutShow(''); return; }
+    tutShow(L[tut].msg);
+  }
+  function tutShow(msg) {
+    const b = document.getElementById('tutBox');
+    if (!b) return;
+    b.textContent = msg; b.className = msg ? 'on' : '';
+  }
+  function tutTick(dt) {
+    if (tut < 0) return;
+    const L = TUT(), s = L[tut], p = G.player, st = G.state;
+    const tb = document.getElementById('tutBox'); if (tb) tb.style.visibility = st === 'paused' ? 'hidden' : '';
+    if (st === 'finished') { tut = -1; lsSet(LS_TUT, '1'); tutShow(''); return; }
+    if (!p || (st !== 'race' && st !== 'countdown')) return;
+    if (s.state === 'countdown') { if (st === 'race') tutNext(); return; }
+    if (st !== 'race') return;
+    tutT += dt;
+    if (s.done(p)) tutHold += dt; else tutHold = 0;
+    if (tutHold >= (s.hold || 0.01) || tutT > s.max) tutNext();
+  }
+
+  // ---- 📅 daily challenge: one mission a day (same for everyone on that date), 🍎 +8 once
+  const LS_DAILY = 'pk_daily', DAILY_COINS = 8;
+  const DAILY = [
+    { id: 'mt', name: '미니 터보 5번 쓰고 완주하기', ok: (r) => r.mt >= 5 },
+    { id: 'nowall', name: '벽에 세게 박지 않고 완주하기', ok: (r) => r.wall === 0 },
+    { id: 'food', name: '한 판에 음식 7개 이상 먹기', ok: (r) => r.food >= 7 },
+    { id: 'top3', name: '3등 안에 들어오기', ok: (r) => r.place <= 3 },
+    { id: 'win', name: '1등으로 완주하기', ok: (r) => r.place === 1 },
+    { id: 'rocket', name: '로켓 스타트 성공하고 완주하기', ok: (r) => r.rocket },
+    { id: 'ovt', name: '한 판에 5번 추월하기', ok: (r) => r.ovt >= 5 },
+  ];
+  function dayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function todayDaily() {
+    const k = dayKey();
+    let h = 7; for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+    return DAILY[h % DAILY.length];
+  }
+  function dailyDone() { try { const o = JSON.parse(lsGet(LS_DAILY) || 'null'); return !!(o && o.d === dayKey() && o.done); } catch (e) { return false; } }
+  function refreshDaily() {
+    const b = document.getElementById('daily');
+    if (!b) return;
+    const c = todayDaily(), d = dailyDone();
+    b.textContent = '📅 오늘의 도전: ' + c.name + (d ? '  ✅ 완료!' : '  · 🍎 +' + DAILY_COINS);
+    b.classList.toggle('done', d);
+  }
+  function dailyCheck(k, place) {
+    if (dailyDone()) return;
+    const c = todayDaily();
+    const r = { mt: rstat.mt, wall: rstat.wall, food: foodRace, place, rocket: G.dbg.rocket === 'good', ovt: (G.dbg.overtakes | 0) - rstat.ovt0 };
+    if (!c.ok(r)) return;
+    lsSet(LS_DAILY, JSON.stringify({ d: dayKey(), done: true }));
+    setWallet(wallet() + DAILY_COINS);
+    achQueue.push({ head: '📅 오늘의 도전 성공!', sub: c.name + ' · 🍎 +' + DAILY_COINS });
+    achShowNext();
+  }
+
+  // ---- 🏆 Grand Prix: the regular maps in a row with the same rivals, points per race
+  const GP_PTS = [10, 8, 6, 5, 4, 3], GP_COINS = [20, 12, 8];
+  let gp = null;   // { round, pts: { defIndex: points }, roster: [defIndex], scored: round, place }
+  function goGP() {
+    ghostMode = false;
+    const maps = REGULAR.slice(0, 4);   // the 4 circuits (the maze is left out)
+    pendingMap = maps[0]; selectFrom = 'title';
+    goSelect();
+    gp = { round: 0, maps, pts: {}, roster: null, scored: -1 };
+  }
+  function gpScore() {
+    if (!gp || gp.scored === gp.round) return;
+    gp.scored = gp.round;
+    const st = computeStandings().slice();
+    st.forEach((k, i) => { gp.pts[k.defIndex] = (gp.pts[k.defIndex] || 0) + (GP_PTS[i] || 0); });
+  }
+  function gpTable() {
+    const ids = [playerDef].concat(gp.roster || []);
+    return ids.map((d) => ({ d, me: d === playerDef, pts: gp.pts[d] || 0 })).sort((a, b) => b.pts - a.pts || (a.me ? -1 : b.me ? 1 : 0));
+  }
+  function gpNext() {
+    gpScore();
+    gp.round++;
+    if (gp.round < gp.maps.length) { startRace(playerDef, gp.maps[gp.round], false); return; }
+    gpFinal();
+  }
+  function gpFinal() {
+    const tb = gpTable(), place = tb.findIndex((r) => r.me) + 1, prize = GP_COINS[place - 1] || 0;
+    if (prize) setWallet(wallet() + prize);
+    musicStop();
+    G.state = 'gpfinal'; G.attract = true;
+    showOnly('gpfinal');
+    const box = document.getElementById('gpList'), info = document.getElementById('gpInfo');
+    if (box) {
+      box.innerHTML = '';
+      tb.forEach((r, i) => {
+        const d = PK.Karts.DEFS[r.d] || {};
+        const row = mk('div', 'gprow' + (r.me ? ' me' : ''));
+        row.appendChild(mk('b', null, i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.'));
+        const nm = mk('span', null, (r.me ? '나 · ' : '') + (d.nameKo || '?')); nm.style.color = d.color || '#fff';
+        row.appendChild(nm);
+        row.appendChild(mk('i', null, r.pts + '점'));
+        box.appendChild(row);
+      });
+    }
+    if (info) info.textContent = place === 1 ? '🏆 그랑프리 우승! 🍎 +' + prize : place <= 3 ? place + '등! 🍎 +' + prize : place + '등 · 다음엔 시상대에 올라가 봐요!';
+    gp.place = place;
+    sfx(place === 1 ? 'finish' : 'lap');
+  }
+  function gpFinalDone() {
+    const place = gp ? gp.place : 6;
+    gp = null;
+    if (place === 1 && PK.Intro) playScript('ending', { place: 1, gp: true }, goTitle);
+    else goTitle();
+  }
+
+  // ---- 🏁 ending cutscene: after the first race you finish (and after winning a Grand Prix)
+  let pendingEnding = 0;
+  function playScript(name, ctx, done) {
+    if (!PK.Intro) { setTimeout(done, 0); return; }
+    G.state = 'intro'; G.attract = true;
+    showOnly('intro');
+    musicStop();
+    PK.Intro.play(name, ctx, uiBeep, done);
+  }
+
   // 🎬 opening cutscene (js/intro.js): home → street → meat corner → start line, then the title.
   // Plays once on first launch (pk_intro_v2), again from the title's '오프닝 다시 보기'.
   function playIntro() {
@@ -394,6 +561,9 @@ window.PK = window.PK || {};
     show(el.title, which === 'title'); show(el.select, which === 'select'); show(el.maps, which === 'maps');
     show(el.pause, which === 'pause'); show(el.shop, which === 'shop'); show(el.dex, which === 'dex'); show(el.ach, which === 'ach'); show(el.rank, which === 'rank');
     show(el.ctest, which === 'ctest'); show(el.mtest, which === 'mtest');
+    show(document.getElementById('gpfinal'), which === 'gpfinal');
+    show(document.getElementById('modes'), which === 'modes'); show(document.getElementById('settings'), which === 'settings');
+    if (which !== 'race' && which !== 'pause') tutShow('');
     if (which === 'pause') musicStop();
     else if (which !== 'race') musicPlay(-1);   // menus: calm title loop
     const racing = which === 'race' || which === 'pause';
@@ -412,8 +582,10 @@ window.PK = window.PK || {};
   }
 
   function goTitle() {
-    G.state = 'title'; G.attract = true;
+    G.state = 'title'; G.attract = true; gp = null;
     showOnly('title');
+    refreshDaily();
+    const be = document.getElementById('btnEnding'); if (be) be.style.display = PK.Intro && PK.Intro.endingSeen && PK.Intro.endingSeen() ? '' : 'none';
     refreshTitle();
     updateBestText();
     setupRace(randomKart(), true, baseMap);
@@ -422,7 +594,7 @@ window.PK = window.PK || {};
   function randomKart() { return NORMAL_KARTS[(Math.random() * NORMAL_KARTS.length) | 0]; }
 
   // '게임 시작': kart select for the next map of the rotation
-  function startGame() { ghostMode = false; pendingMap = baseMap; selectFrom = 'title'; goSelect(); }
+  function startGame() { ghostMode = false; gp = null; pendingMap = baseMap; selectFrom = 'title'; goSelect(); }
 
   function goSelect() {
     G.state = 'select'; G.attract = true;
@@ -437,7 +609,7 @@ window.PK = window.PK || {};
   // map select (title)
   // ---------------------------------------------------------------------------
   function goMaps() {
-    G.state = 'maps'; G.attract = true;
+    G.state = 'maps'; G.attract = true; gp = null;
     showOnly('maps');
     const mt = el.maps && el.maps.querySelector('.stitle');
     if (mt) mt.textContent = ghostMode ? '👻 고스트 모드 · 맵 선택' : '맵 선택';
@@ -801,7 +973,7 @@ window.PK = window.PK || {};
     if (!testMode) { selIdx = defIdx; lsSet(LS_KART, String(defIdx)); }
     if (!testMode && REGULAR.indexOf(mapId) >= 0) { baseMap = mapId; lsSet(LS_MAP, String(mapId)); }
     let surprise = false;
-    if (ghostMode) roll = false;
+    if (ghostMode || gp) roll = false;
     if (roll && SECRET_MAPS.indexOf(mapId) < 0) {
       // 1% glitch world first (only once map.js has it), then the 10% ghost map
       if (hasGlitchMap() && Math.random() < GLITCH_CHANCE) { mapId = GLITCH_MAP; surprise = true; }
@@ -812,12 +984,14 @@ window.PK = window.PK || {};
     if (el.tbItem) el.tbItem.classList.remove('used');
     foodRace = 0; coinsBanked = false; saleAt = -1; saleDone = false;
     rsFrom = -1;
+    rstatReset();
     G.state = 'countdown';
     showOnly('race');
     setupRace(defIdx, false, mapId);
     cdT = surprise ? 4.4 : 3; lastCd = 4; goT = 0;
     surpriseT = surprise ? 1.4 : 0;
     showMapBanner(mapId, surprise);
+    tutStart();
     if (musicCur === mapId) musicCur = null;   // restart the track on retry
     musicPlay(mapId);
     if (surprise) sfx(mapId === GLITCH_MAP ? 'glitch' : 'spooky');
@@ -922,8 +1096,8 @@ window.PK = window.PK || {};
     achBusy = true;
     if (b) {
       b.innerHTML = '';
-      b.appendChild(mk('b', null, '🏅 업적 달성! ' + a.name));
-      b.appendChild(mk('small', null, a.desc + ' · 🍎 +' + a.coins + ' · 칭호 「' + a.title + '」'));
+      b.appendChild(mk('b', null, a.head || '🏅 업적 달성! ' + a.name));
+      b.appendChild(mk('small', null, a.sub || a.desc + ' · 🍎 +' + a.coins + ' · 칭호 「' + a.title + '」'));
       b.className = 'on surprise';
       mapBannerT = 2.6;
     }
@@ -1081,6 +1255,8 @@ window.PK = window.PK || {};
   function nextRace() {
     if (G.online) { if (PK.Net) PK.Net.toLobby(); return; }   // online 2P: back to the room lobby
     if (testMode) { testBack(); return; }
+    if (gp) { gpNext(); return; }
+    if (pendingEnding) { const pl = pendingEnding; pendingEnding = 0; playScript('ending', { place: pl }, goTitle); return; }
     startRace(playerDef, REGULAR[(REGULAR.indexOf(baseMap) + 1) % REGULAR.length], true);
   }
 
@@ -1278,6 +1454,7 @@ window.PK = window.PK || {};
     if (glitch && GLITCH_KART < nDefs && defIdx !== GLITCH_KART) order = shuffle(order.slice(0, 4).concat([GLITCH_KART]));
     if (order.length > 5) order.length = 5;
     if (ghostMode && !attract) order = [];   // 👻 ghost mode: just you (and your ghost)
+    if (gp && !attract) { if (!gp.roster) gp.roster = order.slice(); else order = shuffle(gp.roster.slice()); }   // 🏆 same rivals all GP
     const n = order.length + 1;
     // back row = slots n-2, n-1 (n even). Random side.
     order.splice(n - 1 - (Math.random() < 0.5 ? 1 : 0), 0, defIdx);
@@ -1383,6 +1560,9 @@ window.PK = window.PK || {};
     bankCoins();
     if (!testMode && !ghostMode) rollGhostReward(k);   // solo ghost races: no unlock rolls / achievements
     if (!testMode && !ghostMode) achOnFinish(k);
+    const place = computeStandings().indexOf(k) + 1;
+    if (!testMode && !ghostMode && !G.online) dailyCheck(k, place);
+    if (!testMode && !ghostMode && !G.online && !gp && PK.Intro && PK.Intro.endingSeen && !PK.Intro.endingSeen()) pendingEnding = place;
     if (!testMode && PK.Rank) PK.Rank.submit(raceMap, k.finishTime, k.defIndex);   // ranking board
     musicStop();
   }
@@ -1512,9 +1692,17 @@ window.PK = window.PK || {};
       else if (c === 'KeyK') { uiBeep(0); goRank(); }
       else if (c === 'KeyV') toggleCalm();
       else if (c === 'KeyG') { uiBeep(0); goGhostMode(); }
+      else if (c === 'KeyO') { uiBeep(0); goSettings(); }
+      else if (c === 'KeyN') { uiBeep(0); goModes(); }
     } else if (st === 'rank') {
       if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
       else if (c === 'ArrowLeft' || c === 'ArrowRight') { const n = MAPS().length; rankMap = (rankMap + (c === 'ArrowRight' ? 1 : n - 1)) % n; uiBeep(0); buildRank(); }
+    } else if (st === 'modes' || st === 'settings') {
+      if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
+      else if (st === 'modes' && c === 'KeyL') { uiBeep(0); ghostMode = false; goMaps(); }
+      else if (st === 'modes' && c === 'KeyG') { uiBeep(0); goGhostMode(); }
+    } else if (st === 'gpfinal') {
+      if (isEnter(c) || c === 'Escape') { uiBeep(1); gpFinalDone(); }
     } else if (st === 'dex' || st === 'ach') {
       if (c === 'Escape' || c === 'Backspace' || isEnter(c)) { uiBeep(0); goTitle(); }
     } else if (st === 'ctest') {
@@ -1593,6 +1781,13 @@ window.PK = window.PK || {};
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
     on(document.getElementById('btnIntro'), () => { ensureAudio(); uiBeep(1); playIntro(); });
+    on(document.getElementById('btnEnding'), () => { ensureAudio(); uiBeep(1); playScript('ending', { place: 1 }, goTitle); });
+    on(document.getElementById('btnGP'), () => { ensureAudio(); uiBeep(1); goGP(); });
+    on(document.getElementById('btnModes'), () => { ensureAudio(); uiBeep(1); goModes(); });
+    on(document.getElementById('btnSettings'), () => { ensureAudio(); uiBeep(1); goSettings(); });
+    on(document.getElementById('modesBack'), () => { uiBeep(0); goTitle(); });
+    on(document.getElementById('settingsBack'), () => { uiBeep(0); goTitle(); });
+    on(document.getElementById('gpOk'), () => { ensureAudio(); gpFinalDone(); });
     on(document.getElementById('btnGhost'), () => { ensureAudio(); uiBeep(1); goGhostMode(); });
     on(el.btnTest, () => { ensureAudio(); uiBeep(1); goTest(); });
     on(el.btnMapTest, () => { ensureAudio(); uiBeep(1); goMapTest(); });
@@ -1770,6 +1965,7 @@ window.PK = window.PK || {};
     if (confT > 0) confT -= dt;
     updateParts(dt);
     if (mapBannerT > 0) { mapBannerT -= dt; if (mapBannerT <= 0) hideMapBanner(); }
+    tutTick(dt);
     if (st === 'title' || st === 'select' || st === 'maps' || st === 'shop' || st === 'dex' || st === 'ach' || st === 'rank' || st === 'online' || st === 'ctest' || st === 'mtest') {
       simulate(dt);
       attractT += dt;
@@ -1790,7 +1986,7 @@ window.PK = window.PK || {};
       G.raceTime += dt;
       if (st === 'finished') finT += dt;
       simulate(dt);
-      if (st === 'race') { updateSale(dt); trackPos(dt); refreshTb(); ghostRecord(); }
+      if (st === 'race') { updateSale(dt); trackPos(dt); refreshTb(); ghostRecord(); rstatTick(); }
       const pl = G.player;
       if (pl && st === 'race') {
         if ((pl.boostT || 0) > lastBoostT + 0.3) { speedBurst = 0.35; boostKick(0.22); }   // a fresh boost: speed-line burst + kick
@@ -2445,7 +2641,9 @@ window.PK = window.PK || {};
     if (ghostReward === 'got') textC('GHOST KART UNLOCKED!', PCX, y + 12, 1, blink ? '#c8a0ff' : '#ffffff');
     else if (ghostReward === 'miss') textC('THE GHOST GOT AWAY...', PCX, y + 12, 1, '#a898c8');
     else if (ghostReward === 'glitch') textC('GLITCH KART UNLOCKED!', PCX, y + 12, 1, blink ? '#00e8b8' : '#ff40d0');
-    if (((G.time * 2) | 0) & 1) textC(testMode ? 'ENTER: CHAR TEST  R: RETRY  ESC: MENU' : 'ENTER: NEXT MAP  R: RETRY  ESC: MENU', PCX, py + ph - 10, 1, '#fff');
+    if (gp) textC('GRAND PRIX ' + (gp.round + 1) + '/' + gp.maps.length, PCX, py + ph - 19, 1, '#ffcc00');
+    const nx = gp ? (gp.round + 1 < gp.maps.length ? 'ENTER: NEXT ROUND' : 'ENTER: GP RESULTS') : pendingEnding ? 'ENTER: CONTINUE' : testMode ? 'ENTER: CHAR TEST' : 'ENTER: NEXT MAP';
+    if (((G.time * 2) | 0) & 1) textC(nx + '  R: RETRY  ESC: MENU', PCX, py + ph - 10, 1, '#fff');
   }
 
   // ---------------------------------------------------------------------------
@@ -2522,6 +2720,7 @@ window.PK = window.PK || {};
     // (hits only, 1 px; none for bumps or in calm mode)
     if (!G.attract && !calm && name === 'hit') { shakeT = 0.2; shakeMag = 1; }
     if (!G.attract && !calm && name === 'wall') { shakeT = 0.25; shakeMag = 2; }
+    if (!G.attract && name === 'wall' && G.state === 'race') rstat.wall++;
     if (!G.attract && name === 'glitch') glitchT = 0.35;   // teleport / glitch world: brief screen glitch
     if (!G.attract && (name === 'wall' || name === 'bump' || name === 'hit')) engDip = Math.max(engDip, name === 'bump' ? 0.5 : 1);
     if (!ac || G.attract || G.muted) return;

@@ -10,7 +10,7 @@ window.PK = window.PK || {};
 (function (PK) {
   'use strict';
   const W = 320, H = 180;
-  const LS_SEEN = 'pk_intro_v2', LS_KART = 'pk_kart_v1';
+  const LS_SEEN = 'pk_intro_v2', LS_END = 'pk_ending_v1', LS_KART = 'pk_kart_v1';
   const CPS = 28;                 // typewriter chars per second
   const FADE = 0.4;               // scene fade in/out (s)
 
@@ -573,6 +573,34 @@ window.PK = window.PK || {};
         ] },
       ];
     },
+    // 🏁 ending (after the first finished race / a Grand Prix): pay at the checkout, then dinner at home
+    ending: (c) => {
+      const place = c.place >= 1 ? c.place | 0 : 6, free = place === 1, me = myKart();
+      return [
+        { draw: sPay(free, me), lines: (free ? [
+          ['나', '헉헉… 계산대 도착!'],
+          ['점원', c.gp ? '그랑프리 우승 축하드려요! 1등으로 들어오셨네요!' : '축하드려요! 1등으로 들어오셨네요!'],
+          ['점원', '그럼 하나씩 찍어 드릴게요. 삑, 삑, 삑…'],
+          ['점원', '전부 해서 ' + won(TOTAL) + '인데요…'],
+          ['점원', '1등 상품으로 오늘 장 보신 건 전부 공짜예요!'],
+          ['나', '공짜 목살이다! 감사합니다!'],
+        ] : [
+          ['나', '헉헉… 계산대 도착!'],
+          ['점원', place + '등으로 들어오셨네요. 고생 많으셨어요!'],
+          ['점원', '그럼 하나씩 찍어 드릴게요. 삑, 삑, 삑…'],
+          ['점원', '전부 해서 ' + won(TOTAL) + '입니다.'],
+          ['나', '공짜는 놓쳤지만… 목살은 지켰다. 카드로 할게요.'],
+          ['점원', '다음엔 꼭 1등 하세요! 감사합니다~'],
+        ]) },
+        { draw: sDinner, lines: [
+          ['', '장바구니를 들고 집으로 돌아왔다.'],
+          ['나', '지글지글… 목살 굽는 소리 최고다.'],
+          ['나', '상추에 싸서 한 입… 이 맛이지!'],
+          ['나', free ? '공짜라서 그런지 더 맛있네. 내일도 1등 해야지!' : '다음엔 꼭 1등 해서 공짜로 먹어야지!'],
+          ['', '오늘의 장보기, 완료. — 끝 —'],
+        ] },
+      ];
+    },
     // after Stage 2: out of the mart, walking home — the bag tears and the food scatters (→ Stage 3)
     road: (c) => {
       const place = c.place >= 1 ? c.place | 0 : 6, free = place === 1, me = myKart();
@@ -629,6 +657,7 @@ window.PK = window.PK || {};
     if (!active) return;
     active = false;
     if (markSeen) lsSet(LS_SEEN, '1');
+    if (script === 'ending') lsSet(LS_END, '1');
     el.root.classList.remove('on');
     const cb = onDone; onDone = null;
     // defer so the key that ended the cutscene isn't also handled by the next screen
@@ -687,8 +716,9 @@ window.PK = window.PK || {};
 
   PK.Intro = {
     seen: () => lsGet(LS_SEEN) === '1',
+    endingSeen: () => lsGet(LS_END) === '1',
     // scene names per script (for the stage test menu)
-    SCENES: { intro: ['집', '거리', '정육 코너', '출발선'], checkout: ['계산대', '창고'], road: ['탈출', '밤길'], home: ['저녁 식사'] },
+    SCENES: { intro: ['집', '거리', '정육 코너', '출발선'], ending: ['계산대', '저녁 식사'], checkout: ['계산대', '창고'], road: ['탈출', '밤길'], home: ['저녁 식사'] },
     // story foods bought at the checkout (food.png cell indices, scan order) — the items Stage 3 scatters
     FOODS: ITEMS.map((it) => it[0]),
     // name: 'intro' | 'checkout' | 'road' | 'home'; ctx: { place (race result: checkout/road lines),

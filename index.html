@@ -119,6 +119,20 @@
   #introText { font-size: 1.05em; line-height: 1.4; color: #fff; text-shadow: .08em .08em 0 #000; }
   #introBox.narr #introText { color: #d8d0ea; font-style: italic; }
   #introNext { position: absolute; right: .7em; bottom: .3em; color: #ffcc00; font-size: .8em; }
+  /* ---------- tutorial hint / daily challenge / grand prix ---------- */
+  #tutBox { position: absolute; left: 50%; bottom: 25%; transform: translateX(-50%); z-index: 3; display: none; pointer-events: none;
+    max-width: 86%; text-align: center; padding: .35em .9em; background: rgba(10, 40, 60, .9); border: .2em solid #000;
+    box-shadow: .2em .2em 0 #000, inset 0 .15em 0 #40c8ff; color: #e8f8ff; font-size: .85em; line-height: 1.35; }
+  #tutBox.on { display: block; animation: bannerIn .35s steps(4); }
+  #daily { font-size: .8em; color: #9fe8ff; margin-top: .2em; }
+  #daily.done { color: #8fe0a0; }
+  #gpList { min-width: 16em; margin: .3em auto .5em; }
+  .gprow { display: flex; gap: .6em; align-items: center; padding: .2em .6em; background: rgba(30, 20, 48, .85); border: .15em solid #000; margin: .15em 0; }
+  .gprow.me { background: rgba(120, 90, 0, .6); }
+  .gprow b { width: 2em; } .gprow span { flex: 1; } .gprow i { font-style: normal; color: #ffe14d; }
+  #gpInfo { color: #ffcc00; margin: .2em 0 .5em; text-align: center; }
+  /* ---------- 다른 모드 / 설정 menus ---------- */
+  #modes .mlist, #settings .mlist { display: flex; flex-direction: column; align-items: stretch; gap: .1em; min-width: 18em; }
   /* ---------- title ---------- */
   .tcols { display: flex; align-items: center; justify-content: center; gap: 1em; max-width: 100%; }
   .tmain { display: flex; flex-direction: column; align-items: center; }
@@ -183,7 +197,7 @@
     100% { opacity: 0; transform: translateX(-50%) translateY(-.6em); } }
   /* ---------- title extras / coins ---------- */
   #title .trow .btn { font-size: .8em; padding: .25em .7em; min-height: 2.3em; }
-  #btnShop, #btnDex, #btnAch, #btnRank { font-size: .95em; min-height: 2.5em; }
+  #btnShop, #btnDex, #btnAch, #btnRank, #btnSettings { font-size: .95em; min-height: 2.5em; white-space: nowrap; }
   /* ---------- 랭킹 ---------- */
   #rankTabs .btn { font-size: .7em; padding: .2em .6em; margin: .12em; }
   #rankList { width: 100%; max-width: 30em; margin: .3em 0; }
@@ -268,6 +282,35 @@
     </div>
   </div>
 
+  <div id="gpfinal" class="ov">
+    <div class="stitle">🏆 그랑프리 결과</div>
+    <div id="gpList"></div>
+    <div id="gpInfo"></div>
+    <div class="row"><button id="gpOk" class="btn">확인 (Enter)</button></div>
+  </div>
+  <div id="tutBox"></div>
+
+  <div id="modes" class="ov">
+    <div class="stitle">🎮 게임 모드</div>
+    <div class="mlist">
+      <button id="btnMaps" class="btn">🗺 맵 골라서 달리기 (L)</button>
+      <button id="btnGP" class="btn">🏆 그랑프리 · 4맵 점수 대결</button>
+      <button id="btnGhost" class="btn">👻 고스트 모드 · 이전의 나와 대결 (G)</button>
+      <button id="btnOnline" class="btn">🌐 2인용 (온라인)</button>
+    </div>
+    <div class="row"><button id="modesBack" class="btn alt">← 뒤로 (Esc)</button></div>
+  </div>
+  <div id="settings" class="ov">
+    <div class="stitle">⚙ 설정</div>
+    <div class="mlist">
+      <button id="btnEasy" class="btn alt">🎮 쉬운 조작: 켬</button>
+      <button id="btnCalm" class="btn alt">🌙 화면 흔들림 줄이기: 끔</button>
+      <button id="btnIntro" class="btn alt">🎬 오프닝 다시 보기</button>
+      <button id="btnEnding" class="btn alt" style="display:none">🏁 엔딩 다시 보기</button>
+    </div>
+    <div class="row"><button id="settingsBack" class="btn alt">← 뒤로 (Esc)</button></div>
+  </div>
+
   <div id="title" class="ov on">
     <div class="tcols">
       <div class="tmain">
@@ -275,21 +318,16 @@
         <div class="sub">PIXEL KART · 마트 레이스</div>
         <div id="playerTitle"></div>
         <button id="btnStart" class="btn blink">▶ 게임 시작 (Enter)</button>
-        <button id="btnOnline" class="btn">🎮 2인용 (온라인)</button>
-        <button id="btnGhost" class="btn">👻 고스트 모드 (G) · 이전의 나와 대결</button>
+        <button id="btnModes" class="btn">🎮 다른 모드 (N)</button>
         <div class="row">
-          <button id="btnMaps" class="btn alt">🗺 맵 선택 (L)</button>
           <button id="btnShop" class="btn alt">🛒 상점 (S)</button>
-          <button id="btnDex" class="btn alt">📖 음식 도감 (D)</button>
+          <button id="btnDex" class="btn alt">📖 도감 (D)</button>
           <button id="btnAch" class="btn alt">🏅 업적 (H)</button>
           <button id="btnRank" class="btn alt">🏆 랭킹 (K)</button>
-        </div>
-        <div class="row trow">
-          <button id="btnEasy" class="btn alt">🎮 쉬운 조작: 켬</button>
-          <button id="btnIntro" class="btn alt">🎬 오프닝 다시 보기</button>
-          <button id="btnCalm" class="btn alt">🌙 화면 흔들림 줄이기: 끔</button>
+          <button id="btnSettings" class="btn alt">⚙ 설정 (O)</button>
         </div>
         <div id="best">최고 기록: 없음</div>
+        <div id="daily"></div>
         <div id="coins">🍎 코인 0</div>
       </div>
       <div class="panel">
