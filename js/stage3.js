@@ -52,7 +52,7 @@ window.PK = window.PK || {};
     [1000, 456],  // far east sidewalk
   ];
   const DECOYS = [[200, 376], [512, 340], [760, 104], [840, 452], [990, 196]];
-  const PUDDLES = [[120, 188], [338, 300], [470, 290], [812, 262], [612, 420], [150, 292], [905, 456], [700, 150], [560, 108], [380, 470]]
+  const PUDDLES = [[120, 188], [338, 236], [470, 290], [812, 262], [612, 420], [150, 292], [905, 456], [700, 150], [560, 108], [380, 470]]
     .map((p) => ({ x: p[0], y: p[1], rx: 9, ry: 5 }));
   const CAT_HOME = { x: 440, y: 328 };
 
@@ -1064,7 +1064,8 @@ window.PK = window.PK || {};
   PK.Stage3 = {
     start, stop,
     get active() { return active; },
-    // test hooks (map data only)
+    // test hooks
+    _state: () => S,
     _map: () => { buildMap(); return { grid, RECTS, SPOTS, DECOYS, DOOR, START, MW, MH, T, PR, blocked, tileAtPx, PUDDLES, LIGHTS }; },
   };
 })(window.PK);
