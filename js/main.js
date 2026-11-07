@@ -936,18 +936,48 @@ window.PK = window.PK || {};
   // musicWant = track that should be playing (null = silence); started once the AudioContext exists
   const M = () => PK.Music;
   let musicWant = null, musicCur = null, musicInit = false;
+  // 🎵 background music: assets/music/velocity_bloom.mp3 (looped) on the menus and the regular maps,
+  // routed through the master gain (so M mutes it too). The secret ghost / glitch maps keep their
+  // own generated tracks (PK.Music). A new race restarts the song; the last lap plays it a bit faster.
+  const BGM_SRC = 'assets/music/velocity_bloom.mp3', BGM_VOL = 0.5;
+  let bgm = null, bgmGain = null, bgmRestart = true;
+  const bgmFor = (id) => id !== null && id !== undefined && id !== GHOST_MAP && id !== GLITCH_MAP;
+  function bgmInit() {
+    if (bgm || !ac || !master) return;
+    try {
+      bgm = new Audio(BGM_SRC); bgm.loop = true; bgm.preload = 'auto';
+      const src = ac.createMediaElementSource(bgm);
+      bgmGain = ac.createGain(); bgmGain.gain.value = BGM_VOL;
+      src.connect(bgmGain); bgmGain.connect(master);
+    } catch (e) { bgm = null; }
+  }
+  function bgmPlay() {
+    if (!bgm) return;
+    G.dbg.bgmPlays = (G.dbg.bgmPlays | 0) + 1;
+    if (bgmRestart) { try { bgm.currentTime = 0; } catch (e) { /* not loaded yet */ } bgmRestart = false; }
+    bgm.playbackRate = 1;
+    const pr = bgm.play();
+    if (pr && pr.catch) pr.catch((e) => { musicCur = undefined; G.dbg.bgmErr = e && e.name; });   // blocked until a tap: retried by ensureAudio
+  }
+  function bgmPause() { if (bgm && !bgm.paused) bgm.pause(); }
+  // console / tests: PK.Game.bgmInfo()
+  G.bgmInfo = () => (bgm ? { paused: bgm.paused, t: +bgm.currentTime.toFixed(1), rate: bgm.playbackRate, dur: +(bgm.duration || 0).toFixed(1), err: bgm.error ? bgm.error.code : 0, want: musicWant, cur: musicCur, init: musicInit, ac: ac ? ac.state : '' } : null);
   function musicSync() {
     const m = M();
-    if (!m || !ac || !musicInit || musicWant === musicCur) return;
+    if (!ac || !musicInit || musicWant === musicCur) return;
     try {
-      if (musicWant === null) { if (m.stop) m.stop(); }
-      else { if (m.play) m.play(musicWant); if (m.setLastLap) m.setLastLap(false); }
+      if (musicWant === null) { if (m && m.stop) m.stop(); bgmPause(); }
+      else if (bgm && bgmFor(musicWant)) { if (m && m.stop) m.stop(); bgmPlay(); }
+      else { bgmPause(); if (m && m.play) m.play(musicWant); if (m && m.setLastLap) m.setLastLap(false); }
     } catch (e) { /* ignore */ }
     musicCur = musicWant;
   }
   function musicPlay(id) { musicWant = id; musicSync(); }
   function musicStop() { musicWant = null; musicSync(); }
-  function musicLastLap() { const m = M(); if (m && musicInit && m.setLastLap) { try { m.setLastLap(true); } catch (e) { /* ignore */ } } }
+  function musicLastLap() {
+    if (bgm && !bgm.paused && bgmFor(musicCur)) { bgm.playbackRate = 1.06; return; }   // final lap: a little faster
+    const m = M(); if (m && musicInit && m.setLastLap) { try { m.setLastLap(true); } catch (e) { /* ignore */ } }
+  }
 
   // kart select: one button cycles through owned items (+ none)
   function itemLabel(id) { return id ? ITEMS()[id].nameKo + ' ×' + owned(id) : '없음'; }
@@ -996,6 +1026,7 @@ window.PK = window.PK || {};
     showMapBanner(mapId, surprise);
     tutStart();
     if (musicCur === mapId) musicCur = null;   // restart the track on retry
+    bgmRestart = true;
     musicPlay(mapId);
     if (surprise) sfx(mapId === GLITCH_MAP ? 'glitch' : 'spooky');
   }
@@ -2679,13 +2710,18 @@ window.PK = window.PK || {};
   let skidG = null, skidO = null, skidF = null, engDip = 0, engLastT = 0, lastGas = false;   // drift squeal loop, engine dip after hits
   const lastSfx = Object.create(null);
   function ensureAudio() {
-    if (ac) { if (ac.state === 'suspended' && ac.resume) ac.resume().catch(() => {}); return; }
+    if (ac) {
+      if (ac.state === 'suspended' && ac.resume) ac.resume().catch(() => {});
+      if (bgm && bgm.paused && bgmFor(musicWant) && musicCur !== musicWant) musicSync();
+      return;
+    }
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       ac = new AC();
       master = ac.createGain(); master.gain.value = G.muted ? 0 : 0.55; master.connect(ac.destination);
       sfxBus = ac.createGain(); sfxBus.gain.value = 0.6; sfxBus.connect(master);
+      bgmInit();
       // engine: sawtooth + sub square -> lowpass -> gain
       engO = ac.createOscillator(); engO.type = 'sawtooth'; engO.frequency.value = 50;
       engO2 = ac.createOscillator(); engO2.type = 'square'; engO2.frequency.value = 25;
@@ -2708,14 +2744,15 @@ window.PK = window.PK || {};
       sn.start(); skidO.start();
     } catch (e) { ac = null; }
     if (ac && !musicInit && PK.Music && PK.Music.init) {
-      try { PK.Music.init(ac, master); musicInit = true; if ('muted' in PK.Music) PK.Music.muted = G.muted; } catch (e) { musicInit = false; }
+      // (PK.Music.muted is read-only: use setMuted — assigning it threw and kept the music off)
+      try { PK.Music.init(ac, master); musicInit = true; if (PK.Music.setMuted) PK.Music.setMuted(G.muted); } catch (e) { musicInit = false; }
       musicSync();
     }
   }
   function toggleMute() {
     G.muted = !G.muted;
     if (ac && master) master.gain.setTargetAtTime(G.muted ? 0 : 0.55, ac.currentTime, 0.02);
-    if (PK.Music && 'muted' in PK.Music) PK.Music.muted = G.muted;   // music runs through master anyway
+    if (PK.Music && PK.Music.setMuted) PK.Music.setMuted(G.muted);   // music runs through master anyway
     toast(G.muted ? 'SOUND OFF' : 'SOUND ON');
   }
   function tone(type, f0, f1, dur, vol, delay) {
