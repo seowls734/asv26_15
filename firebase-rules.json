@@ -10,11 +10,25 @@
         }
       }
     },
+    "pkey": {
+      "$pid": {
+        ".read": false,
+        ".write": "!data.exists()",
+        ".validate": "newData.isString() && newData.val().length >= 12 && newData.val().length <= 40 && $pid.length >= 8 && $pid.length <= 20"
+      }
+    },
     "owners": {
       "$name": {
         ".read": false,
         ".write": "!data.exists() || data.child('uid').val() === newData.child('uid').val() || data.child('free').val() === true",
-        ".validate": "newData.hasChildren(['uid','free','at']) && newData.child('uid').isString() && newData.child('uid').val().length >= 12 && newData.child('uid').val().length <= 40 && newData.child('free').isBoolean() && newData.child('at').isNumber() && $name.length <= 12"
+        ".validate": "newData.hasChildren(['uid','free','at']) && newData.child('uid').isString() && newData.child('uid').val().length >= 12 && newData.child('uid').val().length <= 40 && newData.child('free').isBoolean() && newData.child('at').isNumber() && $name.length <= 12 && (!newData.hasChild('pid') || root.child('pkey').child(newData.child('pid').val()).val() === newData.child('uid').val())"
+      }
+    },
+    "alias": {
+      ".read": true,
+      "$name": {
+        ".write": "newData.exists() && root.child('owners').child($name).child('pid').val() === newData.child('pid').val() && root.child('owners').child(newData.child('to').val()).child('pid').val() === newData.child('pid').val() && root.child('owners').child(newData.child('to').val()).child('free').val() === false",
+        ".validate": "newData.hasChildren(['to','pid']) && newData.child('to').isString() && newData.child('to').val().length <= 12 && newData.child('pid').isString()"
       }
     }
   }
