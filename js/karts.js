@@ -215,6 +215,10 @@ window.PK = window.PK || {};
   const ME = ['#3b2a20', '#7d8592', '#f1c9a0'];
   const SHOPPERS = [['#1c1c22', '#c8504a'], ['#7a5232', '#3a8a5a'], ['#d8b860', '#4a6ab8'], ['#8a8a90', '#b85a9a'], ['#2a1a10', '#e0a030'], ['#5a3420', '#5a5a66']];
   const JOBS = [];    // {cv, d, drv, dx, fcv?} — repainted when the cart image arrives (drv null = empty cart, fcv = faded copy)
+  const SPR_PHASE_ME = []; // player copy of SPR_PHASE (follows the player body)
+  const ME_JOBS = [];   // ME_JOBS[defIndex] = paint jobs of the player frames (repainted by setPlayerBody)
+  const BODY_CACHE = {};   // bodySprite canvases by 'body|defIndex[|e]'
+  const mkCv = () => { const c = document.createElement('canvas'); c.width = SW; c.height = SH; return c; };
   let IMG = null, imgOk = false;
 
   const mixW = (h, t) => {   // blend toward white by t
@@ -254,26 +258,351 @@ window.PK = window.PK || {};
     g.fillStyle = cp.hub; g.fillRect(7, y + 41, 6, 1); g.fillRect(35, y + 41, 6, 1);
   }
 
+  // driver: body shifts 2px, head 4px into the lean (tilt). Head rows y 0..13, body rows y 14..21.
+  function drawDriver(g, j) {
+    if (!j.drv) return;
+    const dx = j.dx;
+    const C = j.d.ch && CHARS[j.d.ch];
+    const dp = C ? C.pal : drvPal(j.drv), hd = C ? C.head : DRV_HEAD, bd = C ? C.body : DRV_BODY;
+    if (C && C.split) {   // chromatic ghost copies, offset left/right
+      const one = (col) => { const p = {}; for (const ch in dp) p[ch] = col; return p; };
+      const pm = one('rgba(255,40,200,0.55)'), pc = one('rgba(40,230,255,0.55)');
+      blit(g, bd, pm, DRV_X + dx * 2 - 2, hd.length); blit(g, hd, pm, DRV_X + dx * 4 - 2, 0);
+      blit(g, bd, pc, DRV_X + dx * 2 + 2, hd.length + 1); blit(g, hd, pc, DRV_X + dx * 4 + 2, 1);
+    }
+    blit(g, bd, dp, DRV_X + dx * 2, hd.length);
+    blit(g, hd, dp, DRV_X + dx * 4, 0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Everyday cart bodies (cosmetic only, player kart). 'cart' = assets/cart.png as above; the
+  // others are drawn procedurally on the same SW x SH layout, seen from behind: back() before the
+  // driver, front() after it (rims / bars that the driver sits inside or behind). The accent part
+  // (handle / frame / fabric) uses the kart colour (cartPal bar), grips use cartPal grip.
+  // ---------------------------------------------------------------------------
+  const BODIES = [
+    { id: 'cart', nameKo: '쇼핑카트', desc: '마트의 기본 쇼핑카트' },
+    { id: 'stroller', nameKo: '유모차', desc: '푹신한 시트에 쏙 들어가 앉는 아기 유모차' },
+    { id: 'airport', nameKo: '공항 카트', desc: '여행 가방을 싣고 달리는 공항 수하물 카트' },
+    { id: 'granny', nameKo: '장바구니 캐리어', desc: '시장 갈 때 끌고 다니는 체크무늬 장바구니' },
+    { id: 'parcel', nameKo: '택배 손수레', desc: '택배 상자를 높이 쌓은 든든한 손수레' },
+    { id: 'rearcar', nameKo: '리어카', desc: '큰 바퀴 두 개가 달린 정겨운 나무 리어카' }
+  ];
+  const OUT = '#0b0708', TYRE = '#26242c', TYRE_L = '#4a4852', STEEL = '#9aa0ac', STEEL_D = '#5e6270';
+  const rect = (g, c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  const obox = (g, c, x, y, w, h) => { rect(g, OUT, x, y, w, h); rect(g, c, x + 1, y + 1, w - 2, h - 2); };
+  const rbox = (g, c, x, y, w, h) => {   // outlined box with 1px rounded corners
+    rect(g, OUT, x + 1, y, w - 2, h); rect(g, OUT, x, y + 1, w, h - 2); rect(g, c, x + 1, y + 1, w - 2, h - 2);
+  };
+  // chunky bar like the cart handle: outline, light / main / dark rows, grips at both ends
+  function hbar(g, cp, x, y, w, gw) {
+    rbox(g, cp.bar.M, x, y, w, 5);
+    rect(g, cp.bar.L, x + 1, y + 1, w - 2, 1); rect(g, cp.bar.d, x + 1, y + 3, w - 2, 1);
+    if (gw) for (const gx of [x + 1, x + w - 1 - gw]) {
+      rect(g, cp.grip.M, gx, y + 1, gw, 3); rect(g, cp.grip.L, gx, y + 1, gw, 1); rect(g, cp.grip.d, gx, y + 3, gw, 1);
+    }
+  }
+  // vertical tube (frame / rail) in the accent colour
+  function tube(g, cp, x, y, w, h) { obox(g, cp.bar.M, x, y, w, h); if (w > 2) rect(g, cp.bar.L, x + 1, y + 1, 1, h - 2); }
+  let WCOL = null;   // wheel rects collected while painting (for the wheel decoration overlays)
+  function wheel(g, cp, x, y, w, h) {
+    if (WCOL) WCOL.push([x, y, w, h]);
+    rbox(g, cp.tyre || TYRE, x, y, w, h);
+    rect(g, cp.tyreL || TYRE_L, x + 1, y + 2, 1, h - 4);
+    const hw = Math.max(1, (w - 4) >> 1) + (w > 6 ? 1 : 0), hh = Math.max(1, (h - 4) >> 1);
+    const hx = x + ((w - hw) >> 1), hy = y + ((h - hh) >> 1);
+    rect(g, cp.hub, hx, hy, hw, hh); rect(g, cp.hubD, hx, hy + hh - 1, hw, 1);
+  }
+  const BODY_DRAW = {
+    stroller: {
+      back(g, cp) {
+        // handle tubes down the sides (bar itself is drawn in front)
+        obox(g, STEEL, 4, 14, 3, 38); obox(g, STEEL, 41, 14, 3, 38);
+        // small front wheels (far), basket under the seat, big rear wheels
+        wheel(g, cp, 15, 51, 6, 7); wheel(g, cp, 27, 51, 6, 7);
+        obox(g, '#3a3440', 11, 41, 26, 9);
+        rect(g, '#5a5464', 12, 44, 24, 1); rect(g, '#5a5464', 12, 47, 24, 1);
+        for (let x = 14; x < 36; x += 4) rect(g, '#5a5464', x, 42, 1, 7);
+        wheel(g, cp, 1, 43, 9, 15); wheel(g, cp, 38, 43, 9, 15);
+        // padded seat in the kart colour (quilted)
+        rbox(g, cp.bar.M, 7, 21, 34, 22);
+        rect(g, cp.bar.D, 8, 38, 32, 4); rect(g, cp.bar.d, 8, 41, 32, 1);
+        for (let x = 12; x < 40; x += 6) rect(g, cp.bar.m, x, 24, 1, 14);
+        rect(g, cp.bar.m, 8, 30, 32, 1);
+      },
+      front(g, cp) {
+        // soft seat rim (driver sits inside), white trim, then the push bar across the neck
+        rbox(g, cp.bar.L, 6, 19, 36, 4); rect(g, '#f4f0ea', 7, 20, 34, 1);
+        hbar(g, cp, 3, 10, 42, 5);
+      }
+    },
+    airport: {
+      back(g, cp) {
+        // side posts, the suitcase the driver sits on, the base plate, casters
+        tube(g, cp, 4, 13, 4, 36); tube(g, cp, 40, 13, 4, 36);
+        wheel(g, cp, 15, 52, 5, 6); wheel(g, cp, 28, 52, 5, 6);
+        rbox(g, '#4a5878', 9, 21, 30, 27);
+        for (let x = 13; x < 37; x += 5) rect(g, '#3a4660', x, 23, 2, 23);
+        rect(g, '#5e6e94', 10, 22, 28, 1);
+        rect(g, '#9a9aa8', 10, 22, 2, 2); rect(g, '#9a9aa8', 36, 22, 2, 2);
+        rect(g, '#9a9aa8', 10, 45, 2, 2); rect(g, '#9a9aa8', 36, 45, 2, 2);
+        obox(g, '#f2e6b8', 29, 33, 6, 5); rect(g, '#c04030', 30, 34, 4, 1);   // luggage tag
+        obox(g, STEEL, 2, 47, 44, 5); rect(g, '#c8ccd6', 3, 48, 42, 1);
+        for (let x = 7; x < 42; x += 5) rect(g, STEEL_D, x, 49, 3, 1);
+        wheel(g, cp, 4, 51, 7, 7); wheel(g, cp, 37, 51, 7, 7);
+      },
+      front(g, cp) {
+        rect(g, OUT, 9, 20, 30, 1); rect(g, '#6a7aa0', 10, 21, 28, 1);   // suitcase top edge
+        hbar(g, cp, 2, 10, 44, 6);
+      }
+    },
+    granny: {
+      back(g, cp) {
+        // rods up to the handle, outer frame, the two big wheels and axle
+        obox(g, STEEL, 14, 13, 3, 10); obox(g, STEEL, 31, 13, 3, 10);
+        obox(g, STEEL, 7, 22, 3, 30); obox(g, STEEL, 38, 22, 3, 30);
+        rect(g, STEEL_D, 10, 51, 28, 2);
+        obox(g, STEEL, 21, 50, 6, 4);   // stand foot
+        // tartan bag in the kart colour
+        rbox(g, cp.bar.M, 9, 21, 30, 29);
+        for (let x = 12; x < 38; x += 7) rect(g, cp.bar.D, x, 22, 2, 27);
+        for (let y = 25; y < 49; y += 7) rect(g, cp.bar.D, 10, y, 28, 2);
+        for (let x = 12; x < 38; x += 7) for (let y = 25; y < 49; y += 7) rect(g, cp.bar.d, x, y, 2, 2);
+        for (let x = 15; x < 38; x += 7) rect(g, cp.bar.L, x, 22, 1, 27);
+        rbox(g, cp.bar.m, 13, 30, 22, 8); rect(g, cp.bar.L, 14, 31, 20, 1);   // front pocket
+        rect(g, '#e8c040', 23, 33, 2, 2);                                     // pocket clasp
+        rect(g, cp.bar.d, 10, 47, 28, 2);
+        wheel(g, cp, 2, 42, 9, 15); wheel(g, cp, 37, 42, 9, 15);
+      },
+      front(g, cp) {
+        rbox(g, cp.bar.L, 8, 19, 32, 4); rect(g, cp.bar.D, 9, 21, 30, 1);   // drawstring rim
+        for (let x = 11; x < 38; x += 4) rect(g, '#f4f0ea', x, 20, 1, 1);
+        hbar(g, cp, 11, 10, 26, 0);
+      }
+    },
+    parcel: {
+      back(g, cp) {
+        // rails, cardboard boxes stacked on the nose plate, wheels
+        tube(g, cp, 6, 12, 4, 41); tube(g, cp, 38, 12, 4, 41);
+        rect(g, STEEL_D, 10, 30, 1, 2); rect(g, STEEL_D, 37, 30, 1, 2);
+        const box = (x, y, w, h) => {
+          obox(g, '#c8945a', x, y, w, h);
+          rect(g, '#dcae78', x + 1, y + 1, w - 2, 1); rect(g, '#a87440', x + 1, y + h - 3, w - 2, 2);
+          rect(g, '#e8d0a0', x + (w >> 1) - 2, y + 1, 4, h - 2);   // packing tape
+        };
+        box(10, 34, 28, 17);
+        obox(g, '#f6f4ee', 13, 39, 8, 6); rect(g, '#5e6270', 14, 41, 6, 1); rect(g, '#5e6270', 14, 43, 4, 1);   // shipping label
+        box(13, 21, 22, 14);
+        rect(g, '#2a6ad0', 28, 26, 4, 3);   // "this side up" print
+        obox(g, STEEL, 5, 50, 38, 4); rect(g, '#c8ccd6', 6, 51, 36, 1);
+        wheel(g, cp, 0, 45, 8, 13); wheel(g, cp, 40, 45, 8, 13);
+      },
+      front(g, cp) {
+        rect(g, OUT, 13, 20, 22, 1); rect(g, '#dcae78', 14, 21, 20, 1);   // top box edge
+        hbar(g, cp, 5, 10, 38, 5);
+      }
+    },
+    rearcar: {
+      back(g, cp) {
+        // pull bar + shaft tips ahead of the driver (mostly hidden behind the head)
+        tube(g, cp, 6, 12, 3, 12); tube(g, cp, 39, 12, 3, 12);
+        hbar(g, cp, 5, 11, 38, 0);
+        // big wheels seen edge-on, mudguards, axle
+        rect(g, '#3a3030', 6, 48, 36, 3);
+        if (WCOL) WCOL.push([0, 31, 7, 27], [41, 31, 7, 27]);
+        rbox(g, cp.tyre || TYRE, 0, 31, 7, 27); rbox(g, cp.tyre || TYRE, 41, 31, 7, 27);
+        rect(g, cp.tyreL || TYRE_L, 1, 34, 1, 21); rect(g, cp.tyreL || TYRE_L, 46, 34, 1, 21);
+        rect(g, cp.hub, 6, 47, 3, 4); rect(g, cp.hub, 39, 47, 3, 4);
+        rect(g, cp.hubD, 6, 50, 3, 1); rect(g, cp.hubD, 39, 50, 3, 1);
+        obox(g, cp.bar.D, 0, 29, 8, 3); obox(g, cp.bar.D, 40, 29, 8, 3);
+        // wooden tailgate with painted corner posts
+        obox(g, '#a8743c', 5, 21, 38, 21);
+        for (let y = 26; y < 41; y += 5) rect(g, '#7a5028', 6, y, 36, 1);
+        for (let y = 22; y < 41; y += 5) rect(g, '#c8925a', 6, y, 36, 1);
+        tube(g, cp, 5, 21, 4, 21); tube(g, cp, 39, 21, 4, 21);
+        rect(g, '#3a3030', 9, 42, 30, 3);
+        obox(g, '#e03a3a', 10, 36, 4, 3); obox(g, '#e03a3a', 34, 36, 4, 3);   // reflectors
+      },
+      front(g, cp) {
+        obox(g, cp.bar.M, 4, 19, 40, 4); rect(g, cp.bar.L, 5, 20, 38, 1);   // top rail of the bed
+      }
+    }
+  };
+  let playerBody = 'cart';
+  const bodyOk = (id) => (id === 'cart' || BODY_DRAW[id] ? id : 'cart');
+
+  // ---------------------------------------------------------------------------
+  // Kart decorations (cosmetic, player kart only): a hat on the driver's head, a small flag on a
+  // pole at the back of the kart, recoloured wheels. Drawn with fillRect only (file:// safe).
+  // The head starts at canvas row 0, so hats cover the top rows of the head (nothing goes above).
+  // ---------------------------------------------------------------------------
+  const DECOS = {
+    hat: [{ id: 'none', nameKo: '없음' }, { id: 'cap', nameKo: '야구 모자' }, { id: 'crown', nameKo: '왕관' },
+      { id: 'santa', nameKo: '산타 모자' }, { id: 'helmet', nameKo: '헬멧' }, { id: 'bunny', nameKo: '토끼 귀' }],
+    flag: [{ id: 'none', nameKo: '없음' }, { id: 'checker', nameKo: '체크 깃발' }, { id: 'korea', nameKo: '태극 깃발' },
+      { id: 'pirate', nameKo: '해적 깃발' }, { id: 'heart', nameKo: '하트 깃발' }, { id: 'rainbow', nameKo: '무지개 깃발' }],
+    wheel: [{ id: 'none', nameKo: '기본 바퀴' }, { id: 'gold', nameKo: '황금 바퀴' }, { id: 'neon', nameKo: '네온 바퀴' },
+      { id: 'fire', nameKo: '불꽃 바퀴' }, { id: 'ice', nameKo: '얼음 바퀴' }]
+  };
+  const DECO_KINDS = ['hat', 'flag', 'wheel'];
+  const NO_DECO = { hat: 'none', flag: 'none', wheel: 'none' };
+  const decoOk = (kind, id) => (DECOS[kind] && DECOS[kind].some((e) => e.id === id) ? id : 'none');
+  let playerDeco = Object.assign({}, NO_DECO);
+  const DECO_CACHE = {};   // decoSprite canvases by 'kind|id|defIndex|body'
+
+  // head outline per driver type: EXT[key][row] = [x0, x1] (head-local columns) or null
+  const HEAD_RE = { hero: /[RrkK]/, vamp: /[HhEe]/, ghost: /[oWw]/ };
+  const EXT = {};
+  function headExt(key) {
+    if (EXT[key]) return EXT[key];
+    const rows = key === 'vamp' ? VAMP_HEAD : key === 'ghost' ? GHOST_HEAD : DRV_HEAD, re = HEAD_RE[key] || HEAD_RE.hero;
+    return (EXT[key] = rows.map((r) => {
+      let a = -1, b = -1;
+      for (let x = 0; x < r.length; x++) if (re.test(r[x])) { if (a < 0) a = x; b = x; }
+      return a < 0 ? null : [a, b];
+    }));
+  }
+  // hat pixels in head-local coords (26 wide, centre between cols 12|13), drawn for the right side;
+  // side -1 mirrors the asymmetric bits (santa tip). Returns [[x, y, colour | null(clear)], ...].
+  function hatPix(id, E, side, d) {
+    const grid = new Map();
+    const put = (x, y, c) => grid.set(x + ',' + y, [x, y, c]);
+    const span = (y, a, b, c) => { for (let x = a; x <= b; x++) put(x, y, c); };
+    const ext = (y) => E[y] || E[4];
+    if (id === 'cap') {
+      const M = '#2e62d8', L = '#6e9cf2', D = '#1c3c8e';
+      for (let y = 0; y <= 5; y++) span(y, ext(y)[0], ext(y)[1], y === 5 ? D : M);
+      span(1, ext(1)[0] + 1, ext(1)[0] + 3, L); span(2, ext(2)[0] + 1, ext(2)[0] + 2, L);
+      put(12, 0, L); put(13, 0, L);                                   // top button
+      for (let y = 3; y <= 4; y++) for (let x = 11; x <= 14; x++) grid.delete(x + ',' + y);   // back opening (hair shows)
+      span(5, 11, 14, '#d8d8e0');                                     // strap
+    } else if (id === 'crown') {
+      const G = '#f2c230', L = '#fff0a0', D = '#b07a10', RU = '#e02838', SA = '#2a7af0';
+      for (let y = 0; y <= 2; y++) if (E[y]) span(y, E[y][0], E[y][1], null);   // clear the hair above the band
+      const a = ext(4)[0] + 1, b = ext(4)[1] - 1;
+      span(3, a, b, L); span(4, a, b, G); span(5, a, b, D);
+      span(2, a, a + 2, G); span(1, a, a + 1, G); put(a, 0, L);       // left point
+      span(2, b - 2, b, G); span(1, b - 1, b, G); put(b, 0, L);       // right point
+      span(2, 11, 14, G); span(1, 12, 13, G); put(12, 0, RU); put(13, 0, RU);   // centre point + ruby
+      put(a, 1, L); put(a, 2, L); put(11, 2, L); put(12, 1, L);
+      put(12, 4, RU); put(13, 4, RU); put(a + 2, 4, SA); put(b - 2, 4, SA);
+    } else if (id === 'santa') {
+      const R = '#d8282c', Rl = '#f25a5a', F = '#f8f4f0', Fd = '#c8c2cc';
+      for (let y = 0; y <= 4; y++) span(y, ext(y)[0], ext(y)[1], R);
+      span(1, ext(1)[0] + 1, ext(1)[0] + 2, Rl);
+      const fa = ext(5)[0] - 1, fb = ext(5)[1] + 1;
+      span(5, fa, fb, F); span(6, fa, fb, F); put(fa, 6, Fd); put(fb, 6, Fd); span(6, 11, 14, Fd);
+      // floppy tip hanging to one side with a pompom
+      const t0 = ext(0)[1];
+      span(0, t0 + 1, t0 + 3, R); span(1, ext(1)[1] + 1, ext(1)[1] + 3, R); span(2, ext(2)[1] + 1, ext(2)[1] + 2, R);
+      const px = ext(2)[1] + 3;
+      span(2, px, px + 2, F); span(3, px, px + 2, F); span(4, px, px + 2, F); put(px + 2, 4, Fd); put(px, 2, '#ffffff');
+    } else if (id === 'helmet') {
+      const W = '#f4f4f8', Wd = '#c4c8d4', O = '#3a3a48', S = d ? d.color : '#e03a3a', Sl = mixW(S, 0.35);
+      for (let y = 0; y <= 10; y++) {
+        if (!E[y]) continue;
+        const a = E[y][0] - (y >= 1 ? 1 : 0), b = E[y][1] + (y >= 1 ? 1 : 0);
+        span(y, a, b, y >= 10 ? O : W);
+        if (y < 10) { put(a, y, O); put(b, y, O); put(b - 1, y, Wd); }
+        if (y === 9) span(y, a + 1, b - 1, Wd);
+      }
+      span(0, ext(0)[0], ext(0)[1], O);
+      for (let y = 0; y <= 9; y++) { put(12, y, y ? Sl : O); put(13, y, y ? S : O); }   // stripe in the kart colour
+      put(ext(2)[0] + 1, 2, '#ffffff'); put(ext(3)[0] + 1, 3, '#ffffff');               // shine
+    } else if (id === 'bunny') {
+      const W = '#faf6fa', P = '#f49ac0', O = '#6a5a6e';
+      const a = ext(3)[0] + 2, b = ext(3)[1] - 2;
+      for (let y = 0; y <= 4; y++) {
+        const off = y <= 1 ? 1 : 0;
+        for (const [cx, dir] of [[a, -1], [b, 1]]) {
+          const x = cx + dir * off;
+          put(x - 2, y, O); put(x - 1, y, W); put(x, y, y ? P : W); put(x + 1, y, W); put(x + 2, y, O);
+        }
+      }
+      span(5, ext(5)[0], ext(5)[1], P); span(5, 12, 13, '#ffffff');   // headband with a little bow
+    } else return [];
+    const out = [...grid.values()];
+    if (side < 0) for (const p of out) p[0] = 25 - p[0];
+    return out;
+  }
+  function drawHat(g, j, id) {
+    if (!j.drv || id === 'none') return;
+    const key = j.d.ch === 'vamp' || j.d.ch === 'ghost' ? j.d.ch : 'hero';
+    const px = hatPix(id, headExt(key), j.dx > 0 ? -1 : 1, j.d);
+    const x0 = DRV_X + j.dx * 4;
+    const C = j.d.ch && CHARS[j.d.ch];
+    if (C && C.split) {   // glitch: chromatic copies like the head
+      for (const [x, y, c] of px) if (c) { rect(g, 'rgba(255,40,200,0.55)', x0 + x - 2, y, 1, 1); rect(g, 'rgba(40,230,255,0.55)', x0 + x + 2, y + 1, 1, 1); }
+    }
+    for (const [x, y, c] of px) { if (c) rect(g, c, x0 + x, y, 1, 1); else g.clearRect(x0 + x, y, 1, 1); }
+  }
+
+  // flags: 8x6 inner pattern inside a 10x8 outlined cloth, on a pole beside the driver's head
+  const FLAG_PAL = { K: '#1a1a20', W: '#f4f4f0', R: '#d8283a', B: '#2a5ad0', P: '#ffd0e0', w: '#ffffff',
+    o: '#ff8a20', y: '#ffd830', g: '#3cc050', v: '#8a50d0' };
+  const FLAGS = {
+    checker: ['KKWWKKWW', 'KKWWKKWW', 'WWKKWWKK', 'WWKKWWKK', 'KKWWKKWW', 'KKWWKKWW'],
+    korea: ['KWWWWWWK', 'KWWRRWWK', 'WWRRRBWW', 'WWRBBBWW', 'KWWBBWWK', 'KWWWWWWK'],
+    pirate: ['KKWWWWKK', 'KWWWWWWK', 'KWKWWKWK', 'KWWWWWWK', 'KKWKKWKK', 'KWKKKKWK'],
+    heart: ['PPPPPPPP', 'PRRPPRRP', 'PRwRRRRP', 'PRRRRRRP', 'PPRRRRPP', 'PPPRRPPP'],
+    rainbow: ['RRRRRRRR', 'oooooooo', 'yyyyyyyy', 'gggggggg', 'BBBBBBBB', 'vvvvvvvv']
+  };
+  function drawFlag(g, j, id) {
+    const F = FLAGS[id];
+    if (!F) return;
+    const left = j.dx > 0;   // opposite to the lean (the head moves into the lean)
+    const px = left ? 10 : 36, fx = left ? 0 : 38;   // pole (2 px) / cloth box x
+    rect(g, '#5a5e6a', px, 1, 2, 16); rect(g, '#d8dce4', left ? px : px + 1, 1, 1, 16);
+    rect(g, '#f2c230', px, 0, 2, 1);                  // gold knob
+    rect(g, OUT, fx, 1, 10, 8);
+    blit(g, F, FLAG_PAL, fx + 1, 2);
+  }
+
+  // wheels: palette swap (tyre, tyre light, hub) + a few effect pixels around each wheel
+  const WHEEL_PAL = {
+    gold: { tyre: '#8a6410', tyreL: '#f6dc70', hub: '#fff0a0', hubD: '#c8960e' },
+    neon: { tyre: '#0e2a38', tyreL: '#50f4ff', hub: '#c0ffff', hubD: '#20c8e8' },
+    fire: { tyre: '#4a1208', tyreL: '#ff8a20', hub: '#ffd848', hubD: '#e84010' },
+    ice: { tyre: '#5a8ec0', tyreL: '#e4f8ff', hub: '#d4f4ff', hubD: '#88c4ec' }
+  };
+  function wheelFx(g, id, ws) {
+    for (const [x, y, w, h] of ws) {
+      if (id === 'gold') { rect(g, '#ffffff', x + 1, y + 1, 1, 1); rect(g, '#fff6c8', x + w - 2, y + h - 2, 1, 1); }
+      else if (id === 'neon') {
+        rect(g, 'rgba(80,240,255,0.55)', x - 1, y + 1, 1, h - 2); rect(g, 'rgba(80,240,255,0.55)', x + w, y + 1, 1, h - 2);
+        rect(g, 'rgba(80,240,255,0.4)', x + 1, y - 1, w - 2, 1);
+        rect(g, '#a0ffff', x + 1, y, w - 2, 1);
+      } else if (id === 'fire') {   // little flames licking up from the tyre top
+        const H = [1, 3, 2, 3, 1, 2, 3, 2];
+        for (let i = 1; i < w - 1; i++) {
+          const hh = H[(i + x) % H.length];
+          for (let k = 1; k <= hh; k++) rect(g, k === 1 ? '#ffd040' : k === 2 ? '#ff7a18' : '#e02a10', x + i, y - k + 1, 1, 1);
+        }
+      } else if (id === 'ice') {
+        rect(g, '#ffffff', x + 1, y + 1, 1, 1); rect(g, '#ffffff', x + w - 2, y + 2, 1, 1);
+        rect(g, 'rgba(220,248,255,0.7)', x + 1, y, w - 2, 1);
+      }
+    }
+  }
+
   function paint(j) {
     const g = j.cv.getContext('2d');
     g.imageSmoothingEnabled = false;
     g.clearRect(0, 0, SW, SH);
-    const cp = cartPal(j.d), dx = j.dx;
+    const dc = j.deco || NO_DECO, wp = WHEEL_PAL[dc.wheel];
+    const cp = wp ? Object.assign(cartPal(j.d), wp) : cartPal(j.d);
+    const B = j.body && j.body !== 'cart' && BODY_DRAW[j.body];
+    if (B) {   // procedural body: no cart.png needed
+      const ws = WCOL = [];
+      B.back(g, cp, j); drawDriver(g, j); drawHat(g, j, dc.hat); drawFlag(g, j, dc.flag); B.front(g, cp, j);
+      WCOL = null;
+      if (wp) wheelFx(g, dc.wheel, ws);
+      fadeCopy(j);
+      return;
+    }
     const img = imgOk ? IMG : null;
     if (img) g.drawImage(img, 0, CART_Y); else fallbackCart(g, cp, CART_Y);
-    // driver: body shifts 2px, head 4px into the lean (tilt)
-    if (j.drv) {
-      const C = j.d.ch && CHARS[j.d.ch];
-      const dp = C ? C.pal : drvPal(j.drv), hd = C ? C.head : DRV_HEAD, bd = C ? C.body : DRV_BODY;
-      if (C && C.split) {   // chromatic ghost copies, offset left/right
-        const one = (col) => { const p = {}; for (const ch in dp) p[ch] = col; return p; };
-        const pm = one('rgba(255,40,200,0.55)'), pc = one('rgba(40,230,255,0.55)');
-        blit(g, bd, pm, DRV_X + dx * 2 - 2, hd.length); blit(g, hd, pm, DRV_X + dx * 4 - 2, 0);
-        blit(g, bd, pc, DRV_X + dx * 2 + 2, hd.length + 1); blit(g, hd, pc, DRV_X + dx * 4 + 2, 1);
-      }
-      blit(g, bd, dp, DRV_X + dx * 2, hd.length);
-      blit(g, hd, dp, DRV_X + dx * 4, 0);
-    }
+    drawDriver(g, j); drawHat(g, j, dc.hat); drawFlag(g, j, dc.flag);
     // handle bar back on top (crosses the driver's neck)
     if (img) g.drawImage(img, 0, 0, SW, 8, 0, CART_Y, SW, 8);
     else { g.fillStyle = '#0b0708'; g.fillRect(0, CART_Y + 1, 48, 6); }
@@ -290,12 +619,20 @@ window.PK = window.PK || {};
       g.fillStyle = cp.hub; g.fillRect(7, CART_Y + 41, 4, 1); g.fillRect(37, CART_Y + 41, 5, 1);
       g.fillStyle = cp.hubD; g.fillRect(6, CART_Y + 41, 1, 1);
     }
-    if (j.fcv) {   // faded copy for the phase skill
-      const f = j.fcv.getContext('2d');
-      f.imageSmoothingEnabled = false;
-      f.clearRect(0, 0, SW, SH);
-      f.globalAlpha = PHASE_ALPHA; f.drawImage(j.cv, 0, 0); f.globalAlpha = 1;
+    if (wp) {   // decorated wheels: repaint the two casters with our own pixels (cart.png / fallback)
+      const ws = WCOL = [];
+      wheel(g, cp, 7, CART_Y + 42, 6, 7); wheel(g, cp, 35, CART_Y + 42, 6, 7);
+      WCOL = null;
+      wheelFx(g, dc.wheel, ws);
     }
+    fadeCopy(j);
+  }
+  function fadeCopy(j) {
+    if (!j.fcv) return;   // faded copy for the phase skill
+    const f = j.fcv.getContext('2d');
+    f.imageSmoothingEnabled = false;
+    f.clearRect(0, 0, SW, SH);
+    f.globalAlpha = PHASE_ALPHA; f.drawImage(j.cv, 0, 0); f.globalAlpha = 1;
   }
 
   function loadImg() {
@@ -310,21 +647,35 @@ window.PK = window.PK || {};
     if (!PK.U || typeof document === 'undefined') return;
     loadImg();
     if (IMG && IMG.complete && IMG.naturalWidth) imgOk = true;
-    SPR.length = 0; SPR_ME.length = 0; SPR_EMPTY.length = 0; SPR_PHASE.length = 0; JOBS.length = 0;
-    const mk = () => { const c = document.createElement('canvas'); c.width = SW; c.height = SH; return c; };
+    SPR.length = 0; SPR_ME.length = 0; SPR_EMPTY.length = 0; SPR_PHASE.length = 0; SPR_PHASE_ME.length = 0;
+    JOBS.length = 0; ME_JOBS.length = 0;
+    for (const key in BODY_CACHE) delete BODY_CACHE[key];
+    for (const key in DECO_CACHE) delete DECO_CACHE[key];
     for (const d of DEFS) {
-      const fade = d.skill === 'phase' ? [] : null;
-      const build = (drv) => [-1, 0, 1].map((dx) => {
-        const cv = mk();
-        const j = { cv, d, drv, dx };
-        if (fade) { j.fcv = mk(); fade.push(j.fcv); }
-        JOBS.push(j); paint(j);
-        return cv;
-      });
-      SPR.push(build(SHOPPERS[d.id % SHOPPERS.length]));
-      // character karts (d.ch) show the same driver for AI and player -> share the frames
-      SPR_ME.push(d.ch ? SPR[d.id] : build(ME));
-      SPR_PHASE[d.id] = fade ? fade.slice(0, 3) : undefined;
+      const fade = d.skill === 'phase';
+      const build = (drv, body, jobs) => {
+        const fr = [], fd = fade ? [] : undefined;
+        for (const dx of [-1, 0, 1]) {
+          const cv = mkCv();
+          const j = { cv, d, drv, dx, body };
+          if (jobs) j.deco = playerDeco;
+          if (fade) { j.fcv = mkCv(); fd.push(j.fcv); }
+          JOBS.push(j); if (jobs) jobs.push(j); paint(j);
+          fr.push(cv);
+        }
+        return { fr, fd };
+      };
+      const shop = SHOPPERS[d.id % SHOPPERS.length];
+      const ai = build(shop, 'cart');
+      SPR.push(ai.fr);
+      SPR_PHASE[d.id] = ai.fd;
+      // player frames get their own canvases (repainted in place by setPlayerBody); character
+      // karts (d.ch) show the same driver for AI and player
+      const mj = [];
+      const me = build(d.ch ? shop : ME, playerBody, mj);
+      ME_JOBS.push(mj);
+      SPR_ME.push(me.fr);
+      SPR_PHASE_ME[d.id] = me.fd;
       // empty cart: one straight-on canvas, same size, painted/repainted like the others
       const ecv = document.createElement('canvas');
       ecv.width = SW; ecv.height = SH;
@@ -339,6 +690,46 @@ window.PK = window.PK || {};
     const s = (isPlayer ? SPR_ME : SPR)[defIndex]; return s ? s[1] : null;
   }
   function emptySprite(defIndex) { return SPR_EMPTY[defIndex] || null; }
+
+  // player body: repaint the player frames (SPR_ME / SPR_PHASE_ME) in place; AI keeps the cart
+  function setPlayerBody(id) {
+    playerBody = bodyOk(id);
+    PK.Karts.playerBody = playerBody;
+    for (const jobs of ME_JOBS) for (const j of jobs) { j.body = playerBody; paint(j); }
+    return playerBody;
+  }
+  // player decorations: { hat, flag, wheel } (missing keys keep the current item, unknown ids -> 'none');
+  // repaints the player frames in place, keeping the player body
+  function setPlayerDeco(o) {
+    const n = {};
+    for (const kind of DECO_KINDS) n[kind] = o && o[kind] !== undefined ? decoOk(kind, o[kind]) : playerDeco[kind];
+    playerDeco = n;
+    PK.Karts.playerDeco = Object.assign({}, n);
+    for (const jobs of ME_JOBS) for (const j of jobs) { j.deco = playerDeco; paint(j); }
+    return PK.Karts.playerDeco;
+  }
+  // shop card preview: current player body + defIndex's player driver wearing just that one item (cached)
+  function decoSprite(kind, id, defIndex) {
+    const d = DEFS[defIndex];
+    if (!d || !DECOS[kind] || !PK.U || typeof document === 'undefined') return null;
+    const item = decoOk(kind, id), key = kind + '|' + item + '|' + defIndex + '|' + playerBody;
+    if (DECO_CACHE[key]) return DECO_CACHE[key];
+    const deco = Object.assign({}, NO_DECO); deco[kind] = item;
+    const j = { cv: mkCv(), d, drv: d.ch ? SHOPPERS[d.id % SHOPPERS.length] : ME, dx: 0, body: playerBody, deco };
+    JOBS.push(j); paint(j);   // repaints when cart.png arrives
+    return (DECO_CACHE[key] = j.cv);
+  }
+  // straight-on (centre) frame of a body with that def's player driver/colour, for shop cards (cached)
+  function bodySprite(bodyId, defIndex, empty) {
+    const d = DEFS[defIndex];
+    if (!d || !PK.U || typeof document === 'undefined') return null;
+    const body = bodyOk(bodyId), key = body + '|' + defIndex + (empty ? '|e' : '');
+    if (BODY_CACHE[key]) return BODY_CACHE[key];
+    const drv = empty ? null : d.ch ? SHOPPERS[d.id % SHOPPERS.length] : ME;
+    const j = { cv: mkCv(), d, drv, dx: 0, body };
+    JOBS.push(j); paint(j);   // in JOBS so the cart body repaints when cart.png arrives
+    return (BODY_CACHE[key] = j.cv);
+  }
 
   // ---------------------------------------------------------------------------
   // create
@@ -933,7 +1324,8 @@ window.PK = window.PK || {};
   function frame(k, camA) {
     let s = (k.isPlayer ? SPR_ME : SPR)[k.defIndex];
     const ph = k.fx && k.fx.phase;
-    if (ph > 0 && SPR_PHASE[k.defIndex] && (ph > 0.6 || ((ph * 10) | 0) % 2 === 0)) s = SPR_PHASE[k.defIndex];
+    const PH = (k.isPlayer ? SPR_PHASE_ME : SPR_PHASE)[k.defIndex];
+    if (ph > 0 && PH && (ph > 0.6 || ((ph * 10) | 0) % 2 === 0)) s = PH;
     if (!s) return null;
     if (k.fx.spin > 0) {
       const f = Math.floor(k.spinA / (Math.PI / 2)) & 3;
@@ -1043,5 +1435,6 @@ window.PK = window.PK || {};
     }
   }
 
-  PK.Karts = { DEFS, ROSTER, init, create, update, collide, aiInput, hit, drawFx, frame, sprite, emptySprite };
+  PK.Karts = { DEFS, ROSTER, init, create, update, collide, aiInput, hit, drawFx, frame, sprite, emptySprite,
+    BODIES, setPlayerBody, bodySprite, playerBody, DECOS, setPlayerDeco, decoSprite, playerDeco: Object.assign({}, NO_DECO) };
 })(window.PK);

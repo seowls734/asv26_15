@@ -13,7 +13,7 @@ window.PK = window.PK || {};
   const ATTRACT_RESET = 75;        // seconds before the attract race is re-seeded
   const GHOST_MAP = 4, GHOST_CHANCE = 0.10;
   const SAME_SPEED = { maxV: 153, acc: 108, boostPow: 1.39 };   // the old middle-weight kart's numbers
-  const AI_SPEED = 1;                                             // AI rivals run at the player's speed
+  const AI_SPEED = 1.15;                                          // AI rivals run 1.15× the player's speed
   // the cup rotation: every non-secret map in PK.Track.MAPS (0–3, plus any new ones such as the maze map)
   let REGULAR = [0, 1, 2, 3];
   const NORMAL_KARTS = [0, 1, 2, 3, 4, 5], GHOST_KARTS = [6, 7];   // vampire + ghost join the ghost map
@@ -87,6 +87,39 @@ window.PK = window.PK || {};
     { def: 6, key: 'pk_own_kart_6', price: 50 },   // 뱀파이어: the only special character for sale
   ];
   const charOwned = (c) => lsGet(c.key) === '1';
+  // everyday cart bodies (cosmetic, PK.Karts.BODIES): the shopping cart is free, the rest are bought
+  const LS_BODY = 'pk_body';
+  const BODY_PRICE = { cart: 0, stroller: 15, airport: 20, granny: 25, parcel: 30, rearcar: 40 };
+  const BODIES = () => (PK.Karts.BODIES || []).filter((b) => b.id in BODY_PRICE);
+  const bodyOwned = (id) => id === 'cart' || lsGet('pk_own_body_' + id) === '1';
+  const bodyEquipped = () => { const id = lsGet(LS_BODY) || 'cart'; return bodyOwned(id) && BODIES().some((b) => b.id === id) ? id : 'cart'; };
+  function applyBody() {
+    if (PK.Karts.setPlayerBody) { try { PK.Karts.setPlayerBody(bodyEquipped()); } catch (e) { /* ignore */ } }
+  }
+  // kart decorations (PK.Karts.DECOS: hat / flag / wheel), bought once, one of each kind worn
+  const LS_DECO = 'pk_deco';
+  const DECO_KO = { hat: '모자', flag: '깃발', wheel: '바퀴' };
+  const DECO_PRICE = {
+    hat: { cap: 10, crown: 30, santa: 15, helmet: 20, bunny: 15 },
+    flag: { checker: 8, korea: 12, pirate: 15, heart: 10, rainbow: 18 },
+    wheel: { gold: 25, neon: 18, fire: 22, ice: 15 },
+  };
+  const DECO_LIST = () => {
+    const D = PK.Karts.DECOS || {}, out = [];
+    ['hat', 'flag', 'wheel'].forEach((kind) => (D[kind] || []).forEach((d) => { if (d.id !== 'none' && DECO_PRICE[kind][d.id]) out.push({ kind, id: d.id, nameKo: d.nameKo }); }));
+    return out;
+  };
+  const decoOwned = (kind, id) => id === 'none' || lsGet('pk_own_deco_' + kind + '_' + id) === '1';
+  function decoWorn() {
+    let o = {};
+    try { o = JSON.parse(lsGet(LS_DECO) || '{}') || {}; } catch (e) { o = {}; }
+    const r = {};
+    ['hat', 'flag', 'wheel'].forEach((k) => { r[k] = o[k] && decoOwned(k, o[k]) ? o[k] : 'none'; });
+    return r;
+  }
+  function applyDeco() {
+    if (PK.Karts.setPlayerDeco) { try { PK.Karts.setPlayerDeco(decoWorn()); } catch (e) { /* ignore */ } }
+  }
   const playable = () => {
     const r = [FREE_KART];
     CHAR_SHOP.forEach((c) => { if (charOwned(c) && c.def < PK.Karts.DEFS.length) r.push(c.def); });
@@ -134,6 +167,10 @@ window.PK = window.PK || {};
   // easy controls ('쉬운 조작', on by default): auto gas, steering help toward the racing line, auto drift
   const LS_EASY = 'pk_easy';
   let easy = true;
+  // real 3D view (js/render3d.js + Three.js), always on; only if it can't load or breaks does the
+  // game fall back to the classic Mode-7 view
+  let view3d = true;
+  const use3d = () => view3d && PK.R3D && PK.R3D.available;
   function toggleEasy() {
     easy = !easy;
     lsSet(LS_EASY, easy ? '1' : '0');
@@ -181,6 +218,8 @@ window.PK = window.PK || {};
     PK.Skills.init();
     // every character has the same speed (top speed, acceleration, boost); only handling and skills differ
     PK.Karts.DEFS.forEach((d) => { d.maxV = SAME_SPEED.maxV; d.acc = SAME_SPEED.acc; d.boostPow = SAME_SPEED.boostPow; });
+    applyBody();   // the player's equipped everyday cart (shop)
+    applyDeco();   // and decorations
 
     const sk = parseInt(lsGet(LS_KART), 10);
     selIdx = playable().indexOf(sk) >= 0 ? sk : 0;
@@ -195,6 +234,13 @@ window.PK = window.PK || {};
       btnPause: document.getElementById('btnPause'), mapBanner: document.getElementById('mapBanner'),
       shop: document.getElementById('shop'), shopList: document.getElementById('shopList'), shopCoins: document.getElementById('shopCoins'),
       btnShop: document.getElementById('btnShop'), btnShopBack: document.getElementById('btnShopBack'),
+      dex: document.getElementById('dex'), dexList: document.getElementById('dexList'), dexInfo: document.getElementById('dexInfo'),
+      btnDex: document.getElementById('btnDex'), btnDexBack: document.getElementById('btnDexBack'),
+      ach: document.getElementById('ach'), achList: document.getElementById('achList'), achInfo: document.getElementById('achInfo'),
+      btnAch: document.getElementById('btnAch'), btnAchBack: document.getElementById('btnAchBack'), playerTitle: document.getElementById('playerTitle'),
+      rank: document.getElementById('rank'), rankList: document.getElementById('rankList'), rankTabs: document.getElementById('rankTabs'),
+      rankInfo: document.getElementById('rankInfo'), rankNick: document.getElementById('rankNick'),
+      btnRank: document.getElementById('btnRank'), btnRankBack: document.getElementById('btnRankBack'), btnNick: document.getElementById('btnNick'),
       coins: document.getElementById('coins'), btnItem: document.getElementById('btnItem'), tbItem: document.getElementById('tbItem'),
       btnCalm: document.getElementById('btnCalm'), btnEasy: document.getElementById('btnEasy'),
       ctest: document.getElementById('ctest'), ctList: document.getElementById('ctList'), ctMaps: document.getElementById('ctMaps'),
@@ -212,6 +258,8 @@ window.PK = window.PK || {};
     bindInput();
     refreshCalm();
     refreshEasy();
+    // 3D view: a WebGL canvas under the 2D one (which then only carries the HUD and overlays)
+    if (PK.R3D && PK.R3D.init) { try { PK.R3D.init(el.wrap, canvas); } catch (e) { /* stays 2D */ } }
     resize();
     window.addEventListener('resize', resize);
     goTitle();
@@ -236,7 +284,7 @@ window.PK = window.PK || {};
   // one place that decides which DOM overlay is visible
   function showOnly(which) {
     show(el.title, which === 'title'); show(el.select, which === 'select'); show(el.maps, which === 'maps');
-    show(el.pause, which === 'pause'); show(el.shop, which === 'shop');
+    show(el.pause, which === 'pause'); show(el.shop, which === 'shop'); show(el.dex, which === 'dex'); show(el.ach, which === 'ach'); show(el.rank, which === 'rank');
     show(el.ctest, which === 'ctest'); show(el.mtest, which === 'mtest');
     if (which === 'pause') musicStop();
     else if (which !== 'race') musicPlay(-1);   // menus: calm title loop
@@ -257,6 +305,7 @@ window.PK = window.PK || {};
   function goTitle() {
     G.state = 'title'; G.attract = true;
     showOnly('title');
+    refreshTitle();
     updateBestText();
     setupRace(randomKart(), true, baseMap);
   }
@@ -381,8 +430,73 @@ window.PK = window.PK || {};
       list.appendChild(c);
       shopCards.push(c);
     });
+    // everyday cart bodies: buy once, then equip (looks only)
+    const curBody = bodyEquipped();
+    BODIES().forEach((b) => {
+      const i = shopCards.length, have = bodyOwned(b.id), price = BODY_PRICE[b.id], can = !have && wallet() >= price;
+      const c = mk('div', 'icard body' + (b.id === curBody ? ' eq' : ''));
+      const hd = mk('div', 'ihead');
+      let spr = null;
+      try { spr = PK.Karts.bodySprite ? PK.Karts.bodySprite(b.id, selIdx) : null; } catch (e) { spr = null; }
+      hd.appendChild(copyCanvas(spr, '#9aa6ad', 16, 12));
+      const nm = mk('div', 'iname', '카트 · ' + b.nameKo);
+      nm.appendChild(mk('small', null, have ? (b.id === curBody ? '장착 중' : '보유 중') : '🍎 ' + price));
+      hd.appendChild(nm);
+      c.appendChild(hd);
+      c.appendChild(mk('div', 'idesc', (b.desc || '') + ' · 모양만 바뀌어요'));
+      const ft = mk('div', 'ifoot');
+      ft.appendChild(mk('span', null, have ? '보유' : '한 번 사면 계속 사용'));
+      if (!have) {
+        const bb = mk('button', 'btn ibtn' + (can ? '' : ' off'), '구매');
+        bb.addEventListener('click', (e) => { e.stopPropagation(); ensureAudio(); shopSel = i; shopBuy('body:' + b.id); });
+        ft.appendChild(bb);
+      }
+      const eb = mk('button', 'btn alt ibtn' + (have && b.id !== curBody ? '' : ' off'), b.id === curBody ? '장착 중' : '장착');
+      eb.addEventListener('click', (e) => { e.stopPropagation(); ensureAudio(); shopSel = i; shopEquip('body:' + b.id); });
+      ft.appendChild(eb);
+      c.appendChild(ft);
+      c.addEventListener('click', () => { if (shopSel !== i) { shopSel = i; refreshShopSel(); uiBeep(0); } });
+      list.appendChild(c);
+      shopCards.push(c);
+    });
+    // decorations: hats / flags / wheels — buy once, wear one of each kind (tap again to take off)
+    const worn = decoWorn();
+    DECO_LIST().forEach((dc) => {
+      const i = shopCards.length, have = decoOwned(dc.kind, dc.id), on = worn[dc.kind] === dc.id;
+      const price = DECO_PRICE[dc.kind][dc.id], can = !have && wallet() >= price;
+      const c = mk('div', 'icard deco' + (on ? ' eq' : ''));
+      const hd = mk('div', 'ihead');
+      let spr = null;
+      try { spr = PK.Karts.decoSprite ? PK.Karts.decoSprite(dc.kind, dc.id, selIdx) : null; } catch (e) { spr = null; }
+      hd.appendChild(copyCanvas(spr, '#9aa6ad', 16, 12));
+      const nm = mk('div', 'iname', DECO_KO[dc.kind] + ' · ' + dc.nameKo);
+      nm.appendChild(mk('small', null, have ? (on ? '장착 중' : '보유 중') : '🍎 ' + price));
+      hd.appendChild(nm);
+      c.appendChild(hd);
+      c.appendChild(mk('div', 'idesc', '카트 꾸미기 · 내 카트에 ' + DECO_KO[dc.kind] + '을(를) 달아요'));
+      const ft = mk('div', 'ifoot');
+      ft.appendChild(mk('span', null, have ? '보유' : '한 번 사면 계속 사용'));
+      if (!have) {
+        const bb = mk('button', 'btn ibtn' + (can ? '' : ' off'), '구매');
+        bb.addEventListener('click', (e) => { e.stopPropagation(); ensureAudio(); shopSel = i; shopBuy('deco:' + dc.kind + ':' + dc.id); });
+        ft.appendChild(bb);
+      }
+      const eb = mk('button', 'btn alt ibtn' + (have ? '' : ' off'), on ? '해제' : '장착');
+      eb.addEventListener('click', (e) => { e.stopPropagation(); ensureAudio(); shopSel = i; shopEquip('deco:' + dc.kind + ':' + dc.id); });
+      ft.appendChild(eb);
+      c.appendChild(ft);
+      c.addEventListener('click', () => { if (shopSel !== i) { shopSel = i; refreshShopSel(); uiBeep(0); } });
+      list.appendChild(c);
+      shopCards.push(c);
+    });
     shopSel = U.clamp(shopSel, 0, Math.max(0, shopCards.length - 1));
     refreshShopSel();
+  }
+  function wearDeco(kind, id) {
+    const o = decoWorn();
+    o[kind] = id;
+    lsSet(LS_DECO, JSON.stringify(o));
+    applyDeco(); buildSelect();
   }
   function refreshShopSel() {
     for (let i = 0; i < shopCards.length; i++) shopCards[i].classList.toggle('sel', i === shopSel);
@@ -390,12 +504,42 @@ window.PK = window.PK || {};
     if (c && c.scrollIntoView && G.state === 'shop') { try { c.scrollIntoView({ block: 'nearest' }); } catch (e) { /* ignore */ } }
   }
   function shopBuy(id) {
+    if (String(id).indexOf('deco:') === 0) {
+      const [, kind, did] = id.split(':'), dc = DECO_LIST().find((x) => x.kind === kind && x.id === did);
+      if (!dc) return;
+      const price = DECO_PRICE[kind][did];
+      if (decoOwned(kind, did)) { uiBeep(0); shopMsg = dc.nameKo + '은(는) 이미 있어요'; }
+      else if (wallet() < price) { uiBeep(0); shopMsg = '코인이 부족해요'; }
+      else {
+        setWallet(wallet() - price); lsSet('pk_own_deco_' + kind + '_' + did, '1');
+        wearDeco(kind, did);   // worn right away
+        uiBeep(1); sfx('gauge'); shopMsg = dc.nameKo + ' 구매 · 장착!';
+      }
+      buildShop();
+      return;
+    }
+    if (String(id).indexOf('body:') === 0) {
+      const bid = id.slice(5), b = BODIES().find((x) => x.id === bid);
+      if (!b) return;
+      if (bodyOwned(bid)) { uiBeep(0); shopMsg = b.nameKo + '은(는) 이미 있어요'; }
+      else if (wallet() < BODY_PRICE[bid]) { uiBeep(0); shopMsg = '코인이 부족해요'; }
+      else {
+        setWallet(wallet() - BODY_PRICE[bid]); lsSet('pk_own_body_' + bid, '1');
+        lsSet(LS_BODY, bid); applyBody(); buildSelect();   // a new cart is ridden right away
+        uiBeep(1); sfx('gauge'); shopMsg = b.nameKo + ' 구매 · 장착!';
+      }
+      buildShop();
+      return;
+    }
     if (String(id).indexOf('char:') === 0) {
       const ch = CHAR_SHOP.find((c) => 'char:' + c.def === id), d = ch && PK.Karts.DEFS[ch.def];
       if (!ch || !d) return;
       if (charOwned(ch)) { uiBeep(0); shopMsg = d.nameKo + '은(는) 이미 있어요'; }
       else if (wallet() < ch.price) { uiBeep(0); shopMsg = '코인이 부족해요'; }
-      else { setWallet(wallet() - ch.price); lsSet(ch.key, '1'); uiBeep(1); sfx('gauge'); shopMsg = d.nameKo + ' 캐릭터 획득!'; }
+      else {
+        setWallet(wallet() - ch.price); lsSet(ch.key, '1'); uiBeep(1); sfx('gauge'); shopMsg = d.nameKo + ' 캐릭터 획득!';
+        if (CHAR_SHOP.filter(charOwned).length >= 3) achGrant('collector');
+      }
       buildShop();
       return;
     }
@@ -406,6 +550,21 @@ window.PK = window.PK || {};
     buildShop();
   }
   function shopEquip(id) {
+    if (String(id).indexOf('deco:') === 0) {
+      const [, kind, did] = id.split(':'), dc = DECO_LIST().find((x) => x.kind === kind && x.id === did);
+      if (!dc || !decoOwned(kind, did)) { uiBeep(0); shopMsg = '먼저 구매하세요'; }
+      else if (decoWorn()[kind] === did) { wearDeco(kind, 'none'); uiBeep(0); shopMsg = dc.nameKo + ' 해제'; }
+      else { wearDeco(kind, did); uiBeep(1); shopMsg = dc.nameKo + ' 장착'; }
+      buildShop();
+      return;
+    }
+    if (String(id).indexOf('body:') === 0) {
+      const bid = id.slice(5), b = BODIES().find((x) => x.id === bid);
+      if (!b || !bodyOwned(bid)) { uiBeep(0); shopMsg = '먼저 구매하세요'; }
+      else { lsSet(LS_BODY, bid); applyBody(); buildSelect(); uiBeep(1); shopMsg = b.nameKo + ' 장착'; }
+      buildShop();
+      return;
+    }
     if (String(id).indexOf('char:') === 0) { uiBeep(0); shopMsg = '캐릭터는 카트 선택에서 골라요'; buildShop(); return; }
     if (owned(id) <= 0) { uiBeep(0); shopMsg = '먼저 구매하세요'; }
     else if (equipped() === id) { setEquip(''); uiBeep(0); shopMsg = '장착 해제'; }
@@ -417,7 +576,11 @@ window.PK = window.PK || {};
     if (shopSel < ids.length) return ids[shopSel];
     const chars = CHAR_SHOP.filter((c) => PK.Karts.DEFS[c.def]);
     const ch = chars[shopSel - ids.length];
-    return ch ? 'char:' + ch.def : '';
+    if (ch) return 'char:' + ch.def;
+    const bodies = BODIES(), b = bodies[shopSel - ids.length - chars.length];
+    if (b) return 'body:' + b.id;
+    const dc = DECO_LIST()[shopSel - ids.length - chars.length - bodies.length];
+    return dc ? 'deco:' + dc.kind + ':' + dc.id : '';
   };
 
   // ---------------------------------------------------------------------------
@@ -558,12 +721,192 @@ window.PK = window.PK || {};
     return true;
   }
   const ITEM_EN = { rocket: 'ROCKET START!', turbo: 'TURBO!', magnet: 'FOOD MAGNET!', banana: 'BANANA BOMB!', shield: 'SHIELD!', cloak: 'CLOAK!' };
-  // player ate a food: +1 coin up to FOOD_CAP per race
-  function onFood(k) {
+  // ---- 음식 도감: { foodIndex: times eaten }. A new food pays DEX_NEW coins, the full set DEX_ALL.
+  const LS_DEX = 'pk_dex', DEX_N = 16, DEX_NEW = 2, DEX_ALL = 30;
+  function dex() { try { const o = JSON.parse(lsGet(LS_DEX) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+  const dexCount = (d) => Object.keys(d).filter((k) => d[k] > 0).length;
+  function dexRecord(kind) {
+    if (!(kind >= 0 && kind < DEX_N)) return;
+    const d = dex(), isNew = !(d[kind] > 0);
+    d[kind] = (d[kind] | 0) + 1;
+    lsSet(LS_DEX, JSON.stringify(d));
+    if (!isNew) return;
+    const n = dexCount(d), name = (PK.Skills.foodName && PK.Skills.foodName(kind)) || '';
+    let reward = DEX_NEW;
+    if (n >= DEX_N && lsGet('pk_dex_done') !== '1') { reward += DEX_ALL; lsSet('pk_dex_done', '1'); setTimeout(() => achGrant('dex_done'), 2500); }
+    setWallet(wallet() + reward);
+    const b = el.mapBanner;
+    if (b) {
+      b.innerHTML = '';
+      b.appendChild(mk('b', null, n >= DEX_N ? '📖 음식 도감 완성!' : '📖 새 음식 발견! ' + name + ' (' + n + '/' + DEX_N + ')'));
+      b.appendChild(mk('small', null, '🍎 +' + reward + ' 코인' + (n >= DEX_N ? ' · 16가지 음식을 전부 모았어요!' : '')));
+      b.className = 'on' + (n >= DEX_N ? ' surprise' : '');
+      mapBannerT = n >= DEX_N ? 4 : 2.2;
+    }
+    sfx('gauge');
+  }
+
+  // ---- 업적 / 칭호: one-time achievements pay coins and unlock a title to show on the title screen
+  const LS_ACH = 'pk_ach', LS_TITLE = 'pk_title', LS_STATS = 'pk_stats';
+  const ACH = [
+    { id: 'first_race', name: '첫 완주', desc: '레이스를 처음으로 완주하기', coins: 5, title: '🛒 초보 드라이버' },
+    { id: 'first_win', name: '첫 우승', desc: '1등으로 완주하기', coins: 10, title: '🏆 우승자' },
+    { id: 'all_maps', name: '마트 정복', desc: '일반 맵을 전부 1등으로 완주하기', coins: 30, title: '👑 마트 정복자' },
+    { id: 'ghost_win', name: '유령 사냥', desc: '유령 묘지 서킷에서 1등 하기', coins: 20, title: '👻 유령 사냥꾼' },
+    { id: 'glitch_win', name: '글리치 정복', desc: '글리치 월드에서 1등 하기', coins: 30, title: '🌀 글리치 정복자' },
+    { id: 'maze', name: '미로 탈출', desc: '미로 정원 완주하기', coins: 10, title: '🌿 길찾기 달인' },
+    { id: 'full_cart', name: '장바구니 가득', desc: '한 판에 음식 10개 먹기', coins: 5, title: '🍎 먹보' },
+    { id: 'combo5', name: '드리프트 장인', desc: '드리프트 콤보 X5 달성하기', coins: 10, title: '🔥 드리프트 장인' },
+    { id: 'dex_done', name: '미식가', desc: '음식 도감 16개 완성하기', coins: 20, title: '📖 미식가' },
+    { id: 'rich', name: '부자', desc: '코인 100개 모으기', coins: 10, title: '💰 부자' },
+    { id: 'collector', name: '수집가', desc: '캐릭터 3명 사기', coins: 15, title: '🧸 수집가' },
+    { id: 'veteran', name: '베테랑', desc: '레이스 10판 완주하기', coins: 15, title: '🎖 베테랑' },
+  ];
+  function achDone() { try { const o = JSON.parse(lsGet(LS_ACH) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+  function stats() { try { const o = JSON.parse(lsGet(LS_STATS) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
+  const setStats = (o) => lsSet(LS_STATS, JSON.stringify(o));
+  let achQueue = [], achBusy = false;
+  function achGrant(id) {
+    const a = ACH.find((x) => x.id === id), done = achDone();
+    if (!a || done[id]) return false;
+    done[id] = Date.now();
+    lsSet(LS_ACH, JSON.stringify(done));
+    setWallet(wallet() + a.coins);
+    if (!lsGet(LS_TITLE)) lsSet(LS_TITLE, id);   // the first title is worn right away
+    achQueue.push(a);
+    achShowNext();
+    return true;
+  }
+  // one banner at a time (they may come in bursts at the finish line)
+  function achShowNext() {
+    if (achBusy || !achQueue.length) return;
+    const a = achQueue.shift(), b = el.mapBanner;
+    achBusy = true;
+    if (b) {
+      b.innerHTML = '';
+      b.appendChild(mk('b', null, '🏅 업적 달성! ' + a.name));
+      b.appendChild(mk('small', null, a.desc + ' · 🍎 +' + a.coins + ' · 칭호 「' + a.title + '」'));
+      b.className = 'on surprise';
+      mapBannerT = 2.6;
+    }
+    sfx('gauge');
+    setTimeout(() => { achBusy = false; achShowNext(); }, 2700);
+  }
+  // race finished (not test races, not the F debug finish)
+  function achOnFinish(p) {
+    const place = computeStandings().indexOf(p) + 1, st = stats();
+    st.races = (st.races | 0) + 1;
+    st.wins = Array.isArray(st.wins) ? st.wins : [];
+    if (place === 1 && st.wins.indexOf(raceMap) < 0) st.wins.push(raceMap);
+    setStats(st);
+    achGrant('first_race');
+    if (place === 1) achGrant('first_win');
+    if (REGULAR.every((m) => st.wins.indexOf(m) >= 0)) achGrant('all_maps');
+    if (place === 1 && raceMap === GHOST_MAP) achGrant('ghost_win');
+    if (place === 1 && raceMap === GLITCH_MAP) achGrant('glitch_win');
+    if (PK.Track.def && (PK.Track.def.noMinimap || PK.Track.def.maze)) achGrant('maze');
+    if (st.races >= 10) achGrant('veteran');
+  }
+  function achTick() {   // cheap checks, about once a second
+    if (G.state === 'race' && G.player && (G.player.combo || 0) >= 5) achGrant('combo5');
+    if (wallet() >= 100) achGrant('rich');
+  }
+  const titleOf = () => { const id = lsGet(LS_TITLE); const a = ACH.find((x) => x.id === id); return a && achDone()[id] ? a.title : ''; };
+  function refreshTitle() { if (el.playerTitle) el.playerTitle.textContent = titleOf() ? '칭호 「' + titleOf() + '」' : ''; }
+
+  // ---- 🏆 랭킹: per-map top 10 (worldwide via Firebase when js/rank-config.js is set)
+  let rankMap = 0, rankReq = 0;
+  function goRank() {
+    G.state = 'rank'; G.attract = true;
+    showOnly('rank');
+    rankMap = Math.max(0, Math.min(MAPS().length - 1, baseMap | 0));   // the last regular map raced
+    if (el.rankNick && PK.Rank) el.rankNick.value = PK.Rank.nick();
+    buildRank();
+  }
+  async function buildRank() {
+    const tabs = el.rankTabs, list = el.rankList;
+    if (tabs) {
+      tabs.innerHTML = '';
+      MAPS().forEach((m, i) => {
+        const b = mk('button', 'btn ' + (i === rankMap ? '' : 'alt'), (m.secret ? '★ ' : '') + m.nameKo);
+        b.addEventListener('click', () => { uiBeep(0); rankMap = i; buildRank(); });
+        tabs.appendChild(b);
+      });
+    }
+    if (!list || !PK.Rank) return;
+    list.innerHTML = '<div class="rmsg">불러오는 중…</div>';
+    const req = ++rankReq, res = await PK.Rank.top(rankMap);
+    if (req !== rankReq) return;   // a newer tab was picked meanwhile
+    if (el.rankInfo) el.rankInfo.textContent = (res.online ? '🌏 전 세계 랭킹' : (PK.Rank.configured ? '⚠ 온라인 연결 실패 · 이 기기 기록' : '📱 이 기기 기록 (온라인 랭킹 설정 전)')) + ' · 내 이름 ' + PK.Rank.nick();
+    list.innerHTML = '';
+    if (!res.list.length) { list.appendChild(mk('div', 'rmsg', '아직 기록이 없어요. 첫 기록을 세워 보세요!')); return; }
+    res.list.forEach((e, i) => {
+      const r = mk('div', 'rrow' + (e.me ? ' me' : '') + (i < 3 ? ' top' + (i + 1) : ''));
+      r.appendChild(mk('b', null, ['🥇', '🥈', '🥉'][i] || (i + 1) + '.'));
+      r.appendChild(mk('span', 'rname', e.name));
+      r.appendChild(mk('span', 'rkart', (PK.Karts.DEFS[e.kart] || {}).nameKo || ''));
+      r.appendChild(mk('span', 'rtime', fmt(e.time)));
+      list.appendChild(r);
+    });
+  }
+
+  function goAch() {
+    G.state = 'ach'; G.attract = true;
+    showOnly('ach');
+    buildAch();
+  }
+  function buildAch() {
+    const list = el.achList, done = achDone(), cur = lsGet(LS_TITLE);
+    if (el.achInfo) el.achInfo.textContent = '달성 ' + ACH.filter((a) => done[a.id]).length + ' / ' + ACH.length + (titleOf() ? '  ·  지금 칭호 「' + titleOf() + '」' : '');
+    if (!list) return;
+    list.innerHTML = '';
+    ACH.forEach((a) => {
+      const ok = !!done[a.id], c = mk('div', 'acard' + (ok ? ' ok' : '') + (ok && cur === a.id ? ' on' : ''));
+      c.appendChild(mk('b', null, (ok ? '✅ ' : '🔒 ') + a.name));
+      c.appendChild(mk('div', 'adesc', a.desc));
+      c.appendChild(mk('small', null, '🍎 +' + a.coins + ' · 칭호 「' + a.title + '」'));
+      if (ok) {
+        const bt = mk('button', 'btn ibtn' + (cur === a.id ? ' off' : ''), cur === a.id ? '장착 중' : '칭호 달기');
+        bt.addEventListener('click', () => { ensureAudio(); uiBeep(1); lsSet(LS_TITLE, a.id); refreshTitle(); buildAch(); });
+        c.appendChild(bt);
+      }
+      list.appendChild(c);
+    });
+  }
+
+  function goDex() {
+    G.state = 'dex'; G.attract = true;
+    showOnly('dex');
+    buildDex();
+  }
+  function buildDex() {
+    const list = el.dexList, d = dex(), n = dexCount(d);
+    if (el.dexInfo) el.dexInfo.innerHTML = (n >= DEX_N ? '<span class="full">✓ 완성! </span>' : '') + '모은 음식 ' + n + ' / ' + DEX_N;
+    if (!list) return;
+    list.innerHTML = '';
+    for (let i = 0; i < DEX_N; i++) {
+      const have = d[i] > 0, c = mk('div', 'dcard' + (have ? '' : ' no'));
+      const src = PK.Skills.foodIcon && PK.Skills.foodIcon(i);
+      const cv = copyCanvas(src, '#444', 32, 32);
+      if (!have) {   // unknown foods show as a dark silhouette (no pixel reads, works on file://)
+        const g = cv.getContext('2d');
+        g.globalCompositeOperation = 'source-in'; g.fillStyle = '#0d0a14'; g.fillRect(0, 0, cv.width, cv.height);
+      }
+      c.appendChild(cv);
+      c.appendChild(mk('b', null, have ? PK.Skills.foodName(i) : '???'));
+      c.appendChild(mk('small', null, have ? d[i] + '번 먹음' : '미발견'));
+      list.appendChild(c);
+    }
+  }
+
+  // player ate a food: +1 coin up to FOOD_CAP per race; also fills the 음식 도감
+  function onFood(k, kind) {
     if (G.attract || !k.isPlayer || G.state !== 'race') return;
+    dexRecord(kind);
     if (foodRace < FOOD_CAP) {
       foodRace++;
       toast(foodRace >= FOOD_CAP ? 'FOOD ' + FOOD_CAP + '/' + FOOD_CAP + ' MAX!' : '+1 FOOD ' + foodRace + '/' + FOOD_CAP);
+      if (foodRace >= FOOD_CAP && !testMode) achGrant('full_cart');
     } else toast('FOOD FULL ' + FOOD_CAP + '/' + FOOD_CAP);
   }
   // slipstream (karts.js): charged / released
@@ -596,8 +939,9 @@ window.PK = window.PK || {};
     coinsBanked = true;
     setWallet(wallet() + foodRace);
   }
-  function retryRace() { startRace(playerDef, raceMap, false, testMode); }
+  function retryRace() { if (G.online) return; startRace(playerDef, raceMap, false, testMode); }
   function nextRace() {
+    if (G.online) { if (PK.Net) PK.Net.toLobby(); return; }   // online 2P: back to the room lobby
     if (testMode) { testBack(); return; }
     startRace(playerDef, REGULAR[(REGULAR.indexOf(baseMap) + 1) % REGULAR.length], true);
   }
@@ -677,6 +1021,7 @@ window.PK = window.PK || {};
   // ---------------------------------------------------------------------------
   function openPause() {
     if (!RACE_STATES[G.state]) return;
+    if (G.online) { if (PK.Net) PK.Net.menu(); return; }   // online 2P: menu only, the race never freezes
     pauseFrom = G.state; G.state = 'paused';
     for (const k in keys) keys[k] = false;
     for (const k in touch) touch[k] = false;
@@ -734,6 +1079,8 @@ window.PK = window.PK || {};
     if (newRecord || newLapRecord) lsSet(bestKey(raceMap), JSON.stringify(best));
     bankCoins();
     if (!testMode) rollGhostReward(k);
+    if (!testMode) achOnFinish(k);
+    if (!testMode && PK.Rank) PK.Rank.submit(raceMap, k.finishTime, k.defIndex);   // ranking board
     musicStop();
   }
 
@@ -840,18 +1187,30 @@ window.PK = window.PK || {};
   const PREVENT = { ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1, Space: 1 };
   function onKeyDown(e) {
     ensureAudio();
+    // typing in a text box (nickname, room code): leave the keys to the box, except Enter / Esc
+    const tg = e.target, typing = tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA');
+    if (typing && e.key !== 'Escape') return;
     const c = e.code || e.key;
     if (PREVENT[c]) e.preventDefault();
     const rep = e.repeat;
     keys[c] = true;
     if (rep) return;
+    if (PK.Net && PK.Net.key && PK.Net.key(c)) return;   // online 2P lobby / race keys (js/net.js)
     if (c === 'KeyM') { toggleMute(); return; }
     const st = G.state;
     if (st === 'title') {
       if (isEnter(c)) { uiBeep(1); startGame(); }
       else if (c === 'KeyL') { uiBeep(0); goMaps(); }
       else if (c === 'KeyS') { uiBeep(0); goShop(); }
+      else if (c === 'KeyD') { uiBeep(0); goDex(); }
+      else if (c === 'KeyH') { uiBeep(0); goAch(); }
+      else if (c === 'KeyK') { uiBeep(0); goRank(); }
       else if (c === 'KeyV') toggleCalm();
+    } else if (st === 'rank') {
+      if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
+      else if (c === 'ArrowLeft' || c === 'ArrowRight') { const n = MAPS().length; rankMap = (rankMap + (c === 'ArrowRight' ? 1 : n - 1)) % n; uiBeep(0); buildRank(); }
+    } else if (st === 'dex' || st === 'ach') {
+      if (c === 'Escape' || c === 'Backspace' || isEnter(c)) { uiBeep(0); goTitle(); }
     } else if (st === 'ctest') {
       if (isEnter(c)) testStart();
       else if (c === 'Escape' || c === 'Backspace') { uiBeep(0); goTitle(); }
@@ -917,6 +1276,13 @@ window.PK = window.PK || {};
     on(el.btnMapsBack, () => { uiBeep(0); goTitle(); });
     on(el.btnShop, () => { ensureAudio(); uiBeep(1); goShop(); });
     on(el.btnShopBack, () => { uiBeep(0); goTitle(); });
+    on(el.btnDex, () => { ensureAudio(); uiBeep(1); goDex(); });
+    on(el.btnDexBack, () => { uiBeep(0); goTitle(); });
+    on(el.btnAch, () => { ensureAudio(); uiBeep(1); goAch(); });
+    on(el.btnAchBack, () => { uiBeep(0); goTitle(); });
+    on(el.btnRank, () => { ensureAudio(); uiBeep(1); goRank(); });
+    on(el.btnRankBack, () => { uiBeep(0); goTitle(); });
+    on(el.btnNick, () => { if (PK.Rank && el.rankNick) { PK.Rank.setNick(el.rankNick.value); uiBeep(1); buildRank(); } });
     on(el.btnItem, () => { ensureAudio(); cycleItem(); });
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
@@ -1066,26 +1432,30 @@ window.PK = window.PK || {};
     itemPrev = ib;
     for (let i = 0; i < ks.length; i++) {
       const k = ks[i];
+      if (k.remote) { if (PK.Net) PK.Net.drive(k, dt); continue; }   // online friend: network-driven
       const inp = (k.isPlayer && race) ? playerInput() : K.aiInput(k, G);
       // skill rising edge must be checked BEFORE update (update overwrites k.prev)
       if (inp && inp.skill && !(k.prev && k.prev.skill)) PK.Skills.tryUse(k, G);
       K.update(k, inp, dt, G);
     }
     K.collide(ks);
+    if (G.online && PK.Net) PK.Net.pin(ks);   // the friend's kart stays where the network says
     PK.Skills.update(dt, G);
   }
 
   function step(dt) {
     G.time += dt;
+    if (((G.time) | 0) !== ((G.time - dt) | 0)) achTick();
     if (toastT > 0) toastT -= dt;
     if (bannerT > 0) bannerT -= dt;
     if (shakeT > 0) shakeT -= dt;
     const st = G.state;
+    if (PK.Net && PK.Net.tick) PK.Net.tick(dt);   // online 2P: send/receive, scheduled start
     if (st === 'paused') return;     // frozen: no simulation, race timer stopped
     if (goT > 0) goT -= dt;
     if (surpriseT > 0) surpriseT -= dt;
     if (mapBannerT > 0) { mapBannerT -= dt; if (mapBannerT <= 0) hideMapBanner(); }
-    if (st === 'title' || st === 'select' || st === 'maps' || st === 'shop' || st === 'ctest' || st === 'mtest') {
+    if (st === 'title' || st === 'select' || st === 'maps' || st === 'shop' || st === 'dex' || st === 'ach' || st === 'rank' || st === 'online' || st === 'ctest' || st === 'mtest') {
       simulate(dt);
       attractT += dt;
       if (attractT > ATTRACT_RESET) setupRace(randomKart(), true, raceMap);
@@ -1346,19 +1716,28 @@ window.PK = window.PK || {};
 
   function render() {
     if (!ctx || !G.player) return;
-    PK.Track.drawBackground(buf, camA);
-    drawGround();
-    let ox = 0, oy = 0;
-    if (shakeT > 0) {
-      ox = Math.round((Math.random() * 2 - 1) * shakeMag);
-      oy = Math.round((Math.random() * 2 - 1) * shakeMag);
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    if (use3d()) {
+      // 3D: the WebGL canvas below draws the world; this canvas keeps only HUD / overlays
+      canvas.style.background = 'transparent';
+      ctx.clearRect(0, 0, W, H);
+      try { PK.R3D.render(G, camX, camY, camA); } catch (e) { view3d = false; }   // broken 3D -> 2D
+    } else {
+      if (PK.R3D && PK.R3D.hide) PK.R3D.hide();
+      canvas.style.background = '';
+      PK.Track.drawBackground(buf, camA);
+      drawGround();
+      let ox = 0, oy = 0;
+      if (shakeT > 0) {
+        ox = Math.round((Math.random() * 2 - 1) * shakeMag);
+        oy = Math.round((Math.random() * 2 - 1) * shakeMag);
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+      }
+      ctx.putImageData(img, ox, oy);
+      ctx.save();
+      if (ox || oy) ctx.translate(ox, oy);
+      drawBillboards();
+      ctx.restore();
     }
-    ctx.putImageData(img, ox, oy);
-    ctx.save();
-    if (ox || oy) ctx.translate(ox, oy);
-    drawBillboards();
-    ctx.restore();
     const fx = PK.Track.fx;
     if (fx === 'haunted') drawNightFx();
     else if (fx === 'dusk') drawDuskFx();
@@ -1572,7 +1951,7 @@ window.PK = window.PK || {};
     if (toastT > 0) textC(toastText, CX, bannerT > 0 ? 50 : 36, 2, '#9fe8ff');
 
     // results
-    if (st === 'finished' && finT > 1.2) drawResults(stand, blink);
+    if (st === 'finished' && finT > 1.2 && !G.online) drawResults(stand, blink);   // online: js/net.js panel
   }
 
   function drawResults(stand, blink) {
@@ -1719,4 +2098,52 @@ window.PK = window.PK || {};
       engG.gain.setTargetAtTime(vol, t, 0.1);
     } catch (e) { /* ignore */ }
   }
+
+  // ---------------------------------------------------------------------------
+  // online 2P (js/net.js): a 2-kart race (me + the friend's network-driven kart, no AI).
+  // slot 0 = host (left), slot 1 = guest (right), side by side on the front row.
+  // Online races count like test races (no best times / ranking / unlocks); coins are still banked.
+  // ---------------------------------------------------------------------------
+  function startOnlineRace(defIdx, mapId, slot, remoteDef) {
+    if (playable().indexOf(defIdx) < 0) defIdx = NORMAL_KARTS[0];
+    if (!MAPS()[mapId]) mapId = REGULAR[0];
+    if (!(remoteDef >= 0 && remoteDef < PK.Karts.DEFS.length)) remoteDef = NORMAL_KARTS[0];
+    testMode = true; ghostReward = ''; playerDef = defIdx;
+    raceItem = equipped(); itemUsed = false; itemPrev = true;
+    if (el.tbItem) el.tbItem.classList.remove('used');
+    foodRace = 0; coinsBanked = false; saleAt = -1; saleDone = false;
+    G.online = true;
+    G.state = 'countdown';
+    showOnly('race');
+    setupRace(defIdx, false, mapId);
+    const N = PK.Track.N, gi = ((N - 4) % N + N) % N;
+    const mk2 = (di, lat, me) => {
+      const k = PK.Karts.create(di, gi, lat, me);
+      k.lapTimes = []; k.maxLap = 0; k._mLap = 0; k.lapStart = 0; k.finished = false; k.finishTime = 0;
+      return k;
+    };
+    const p = mk2(defIdx, slot ? 10 : -10, true), r = mk2(remoteDef, slot ? -10 : 10, false);
+    r.remote = true; r.name = 'FRIEND';
+    G.karts = [p, r]; G.standings = G.karts.slice(); G.player = p;
+    camA = p.a; camX = p.x - Math.cos(camA) * C.CAM_DIST; camY = p.y - Math.sin(camA) * C.CAM_DIST;
+    cdT = 3; lastCd = 4; goT = 0; surpriseT = 0;
+    showMapBanner(mapId, false);
+    if (musicCur === mapId) musicCur = null;
+    musicPlay(mapId);
+    return r;
+  }
+  // what js/net.js needs from the engine (no other access to main.js internals)
+  G.ext = {
+    startOnlineRace, goTitle,
+    showOnly: (w) => showOnly(w),
+    playable: () => playable(),
+    kart: () => selIdx,
+    setKart: (i) => { if (playable().indexOf(i) >= 0) { selIdx = i; lsSet(LS_KART, String(i)); } },
+    maps: () => selectableMaps(),
+    mapName: (id) => mapInfo(id).nameKo,
+    attract: (mapId) => { G.attract = true; if (raceMap !== mapId || !G.karts.length || G.online || G.karts.some((k) => k.remote)) { G.online = false; setupRace(randomKart(), true, mapId); } },
+    beep: (k) => uiBeep(k), audio: () => ensureAudio(), sfx: (n) => sfx(n), fmt: (t) => fmt(t),
+    finT: () => finT, raceTime: () => G.raceTime,
+    clearKeys: () => { for (const k in keys) keys[k] = false; for (const k in touch) touch[k] = false; },
+  };
 })(window.PK);

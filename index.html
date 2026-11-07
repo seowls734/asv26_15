@@ -32,6 +32,7 @@
   }
   #wrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 320px; height: 180px; }
   #game {
+    position: relative; z-index: 1;   /* above the 3D canvas (#game3d, added by js/render3d.js) */
     display: block; width: 100%; height: 100%; background: #000;
     image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none;
     box-shadow: 0 0 0 4px #000, 0 0 40px rgba(255, 160, 0, .12);
@@ -164,7 +165,42 @@
   #mapBanner.sale b { color: #ffe14d; font-size: 1.6em; }
   /* ---------- title extras / coins ---------- */
   #title .trow .btn { font-size: .8em; padding: .25em .7em; min-height: 2.3em; }
-  #btnShop { font-size: .95em; min-height: 2.5em; }
+  #btnShop, #btnDex, #btnAch, #btnRank { font-size: .95em; min-height: 2.5em; }
+  /* ---------- 랭킹 ---------- */
+  #rankTabs .btn { font-size: .7em; padding: .2em .6em; margin: .12em; }
+  #rankList { width: 100%; max-width: 30em; margin: .3em 0; }
+  .rrow { display: grid; grid-template-columns: 2.2em 1fr 4.5em 5em; gap: .4em; align-items: center; padding: .25em .5em; margin: .12em 0;
+    background: #2a1f3d; border: .12em solid #000; font-size: .8em; color: #e8e0f8; }
+  .rrow b { color: #ffcc00; text-align: center; }
+  .rrow .rkart { color: #a898c8; font-size: .85em; }
+  .rrow .rtime { color: #fff; text-align: right; font-variant-numeric: tabular-nums; }
+  .rrow.top1 { background: #4a3a12; } .rrow.top2 { background: #3a3a46; } .rrow.top3 { background: #43301e; }
+  .rrow.me { outline: .15em solid #7dff9a; }
+  .rmsg { padding: .6em; text-align: center; font-size: .8em; color: #c8bce0; background: #2a1f3d; border: .12em solid #000; }
+  #rankNick { font: inherit; font-size: .85em; padding: .3em .5em; width: 9em; border: .15em solid #000; border-radius: .3em; }
+  /* ---------- 업적 ---------- */
+  #achList { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35em; width: 100%; max-width: 46em; }
+  .acard { background: #160f22; border: .15em solid #000; padding: .3em .45em; font-size: .7em; color: #a898c8;
+    box-shadow: .15em .15em 0 #000; }
+  .acard b { display: block; color: #8a7aa8; font-size: 1.1em; }
+  .acard .adesc { margin: .15em 0; }
+  .acard small { color: #8a7aa8; }
+  .acard.ok { background: #2a1f3d; color: #e8e0f8; }
+  .acard.ok b { color: #ffcc00; }
+  .acard.ok small { color: #ffe9a8; }
+  .acard.on { border-color: #ffcc00; box-shadow: .15em .15em 0 #000, 0 0 0 .12em #ff8800; }
+  .acard .btn { font-size: .85em; margin: .25em 0 0; padding: .15em .6em; }
+  #playerTitle { margin-top: .2em; font-size: .85em; color: #ffcc00; text-shadow: .1em .1em 0 #000; min-height: 1em; }
+  /* ---------- 음식 도감 ---------- */
+  #dexList { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: .35em; width: 100%; max-width: 46em; }
+  .dcard { background: #2a1f3d; border: .15em solid #000; padding: .25em .2em; text-align: center; font-size: .7em;
+    box-shadow: .15em .15em 0 #000, inset .15em .15em 0 rgba(255, 255, 255, .08); }
+  .dcard canvas { width: 100%; max-width: 4em; height: auto; image-rendering: pixelated; display: block; margin: 0 auto; }
+  .dcard b { display: block; font-weight: 700; color: #fff; margin-top: .1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dcard small { color: #ffcc00; }
+  .dcard.no { background: #160f22; }
+  .dcard.no b { color: #6d5a8c; }
+  #dexInfo .full { color: #7dff9a; }
   #coins, .wallet { margin-top: .3em; font-size: .85em; color: #ffe14d; text-shadow: .1em .1em 0 #000; }
   .wallet { margin: 0 0 .4em; }
   /* ---------- shop ---------- */
@@ -209,10 +245,15 @@
       <div class="tmain">
         <h1>픽셀 카트</h1>
         <div class="sub">PIXEL KART · 마트 레이스</div>
+        <div id="playerTitle"></div>
         <button id="btnStart" class="btn blink">▶ 게임 시작 (Enter)</button>
+        <button id="btnOnline" class="btn">🎮 2인용 (온라인)</button>
         <div class="row">
           <button id="btnMaps" class="btn alt">🗺 맵 선택 (L)</button>
           <button id="btnShop" class="btn alt">🛒 상점 (S)</button>
+          <button id="btnDex" class="btn alt">📖 음식 도감 (D)</button>
+          <button id="btnAch" class="btn alt">🏅 업적 (H)</button>
+          <button id="btnRank" class="btn alt">🏆 랭킹 (K)</button>
         </div>
         <div class="row trow">
           <button id="btnEasy" class="btn alt">🎮 쉬운 조작: 켬</button>
@@ -262,6 +303,42 @@
   </div>
 
   <!-- 상점 -->
+  <!-- 🏆 랭킹 (filled by main.js buildRank from js/rank.js) -->
+  <div id="rank" class="ov">
+    <div class="stitle">🏆 랭킹</div>
+    <div id="rankInfo" class="wallet">불러오는 중…</div>
+    <div id="rankTabs" class="row" style="flex-wrap:wrap;justify-content:center"></div>
+    <div id="rankList"></div>
+    <div class="row">
+      <input id="rankNick" maxlength="12" placeholder="내 이름" aria-label="내 이름">
+      <button id="btnNick" class="btn alt">이름 저장</button>
+      <button id="btnRankBack" class="btn alt">← 뒤로</button>
+    </div>
+    <div class="hint">맵마다 가장 빠른 기록 TOP 10 · 완주하면 기록이 자동으로 올라가요 · ← → 맵 바꾸기 · Esc 뒤로</div>
+  </div>
+
+  <!-- 업적 / 칭호 (filled by main.js buildAch) -->
+  <div id="ach" class="ov">
+    <div class="stitle">🏅 업적</div>
+    <div id="achInfo" class="wallet">달성 0 / 12</div>
+    <div id="achList"></div>
+    <div class="row">
+      <button id="btnAchBack" class="btn alt">← 뒤로</button>
+    </div>
+    <div class="hint">업적을 깨면 코인과 칭호를 받아요 · 받은 칭호는 「칭호 달기」로 타이틀에 표시 · Esc 뒤로</div>
+  </div>
+
+  <!-- 음식 도감: foods eaten at least once (filled by main.js buildDex) -->
+  <div id="dex" class="ov">
+    <div class="stitle">📖 음식 도감</div>
+    <div id="dexInfo" class="wallet">0 / 16</div>
+    <div id="dexList"></div>
+    <div class="row">
+      <button id="btnDexBack" class="btn alt">← 뒤로</button>
+    </div>
+    <div class="hint">레이스에서 처음 먹는 음식은 도감에 등록돼요 · 새 음식 🍎 +2 · 16개를 다 모으면 🍎 +30 · Esc 뒤로</div>
+  </div>
+
   <div id="shop" class="ov">
     <div class="stitle">🛒 상점</div>
     <div id="shopCoins" class="wallet">🍎 보유 코인 0</div>
@@ -336,7 +413,16 @@
 <script src="js/karts.js"></script>
 <script src="js/skills.js"></script>
 <script src="js/music.js"></script>
+<!-- real 3D view: Three.js (if it can't load, e.g. offline, the game stays in the classic 2D view) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/kart3d.js"></script>
+<script src="js/render3d.js"></script>
+<script src="js/rank-config.js"></script>
+<script src="js/rank.js"></script>
+<!-- online 2P: PeerJS (WebRTC + free PeerJS cloud signalling); async so a slow/blocked CDN never delays the game -->
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
 <script src="js/main.js"></script>
+<script src="js/net.js"></script>
 <script src="js/joystick.js"></script>
 <script>
   (function () {
