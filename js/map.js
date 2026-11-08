@@ -9,6 +9,7 @@ window.PK = window.PK || {};
 (function (PK) {
   'use strict';
 
+  const OBSTACLES_ON = false;         // solid road obstacles (boxes, cones, cars…) — turned off
   const SPACING = 6;                  // centerline resample spacing (units)
   const TS = 64;                      // outside-floor tile period (TS x TS lookup)
   const ICE_GRIP = 0.3;               // grip multiplier on an ice patch
@@ -2544,6 +2545,7 @@ window.PK = window.PK || {};
     _placeObstacles(def) {
       const N = this.N, P = this.PTS, TAN = this.TAN, half = this.ROAD_W / 2;
       const obs = this.obstacles = [];
+      if (!OBSTACLES_ON) return;   // 장애물 없음: no solid obstacles on any map (racing only)
       const spec = OBSTACLES[def.id];
       if (!spec) return;
       const rnd = PK.U.rng(def.seed ^ 0x0b57);
