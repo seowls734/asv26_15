@@ -398,6 +398,133 @@ window.PK = window.PK || {};
     renderer.render(scene, camera);
   }
 
+  // ---------------------------------------------------------------- floor-only 3D (the default view)
+  // Only the ground is real 3D: the painted floor, raised kerbs along the road edges and a low wall on
+  // the barrier line, under the map's sky. Karts, props, food and effects stay the 2D pixel billboards
+  // main.js draws on top, so the camera here matches the Mode-7 projection exactly: same position,
+  // level (no pitch) with the horizon shifted to row HORIZON, focal FOCAL. Drawn at 2x the game
+  // resolution and scaled up pixelated, so it sits with the pixel art.
+  let floorGroup = null, floorMap = -1, floorTheme = 0, floorSky = null;
+  const css = (c, fb) => { try { return new (T3().Color)(c || fb); } catch (e) { return new (T3().Color)(fb); } };
+  function clearFloor() {
+    if (floorGroup) {
+      scene.remove(floorGroup);
+      floorGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+    }
+    if (floorSky) { scene.remove(floorSky); floorSky.geometry.dispose(); floorSky.material.map.dispose(); floorSky.material.dispose(); floorSky = null; }
+    floorGroup = null;
+  }
+  // a strip of boxes following the centerline at lateral offset `lat` (both sides), as one mesh
+  function edgeStrip(Tk, lat, w, h, colA, colB, every) {
+    const THREE = T3(), pos = [], col = [], idx = [];
+    const cA = css(colA, '#d8382f'), cB = css(colB || colA, '#f2f2f2');
+    let v = 0;
+    const box = (x0, z0, x1, z1, t, c) => {
+      // a box from (x0,z0) to (x1,z1) along the edge, w wide (perpendicular), h tall
+      const nx = -Math.sin(t) * w / 2, nz = Math.cos(t) * w / 2;
+      const P = [[x0 - nx, z0 - nz], [x1 - nx, z1 - nz], [x1 + nx, z1 + nz], [x0 + nx, z0 + nz]];
+      for (const yy of [0, h]) for (const q of P) { pos.push(q[0], yy, q[1]); }
+      const F = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7], [4, 5, 6, 7]];
+      const base = v;
+      for (let i = 0; i < 8; i++) col.push(c.r, c.g, c.b);
+      for (const f of F) idx.push(base + f[0], base + f[1], base + f[2], base + f[0], base + f[2], base + f[3]);
+      v += 8;
+    };
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < Tk.N; i += every) {
+        const j = Math.min(Tk.N, i + every) % Tk.N, a = Tk.PTS[i], b = Tk.PTS[j], t = Tk.TAN[i], tb = Tk.TAN[j];
+        const ax = a[0] - Math.sin(t) * lat * side, az = a[1] + Math.cos(t) * lat * side;
+        const bx = b[0] - Math.sin(tb) * lat * side, bz = b[1] + Math.cos(tb) * lat * side;
+        box(ax, az, bx, bz, t, ((i / every) | 0) % 2 ? cA : cB);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return new THREE.Mesh(g, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0 }));
+  }
+  function buildFloor() {
+    const THREE = T3(), Tk = PK.Track, TEX = C().TEX, RS = (Tk.def && Tk.def.road) || {};
+    clearFloor(); clearMap();
+    floorGroup = new THREE.Group();
+    floorMap = Tk.current; floorTheme = Tk.theme;
+    const fogCol = u32ToCss(Tk.FOG);
+    fog.color.setHex(fogCol); fog.near = C().FOG_NEAR; fog.far = C().FOG_FAR;
+    scene.background = new THREE.Color(fogCol);
+    const night = Tk.fx === 'haunted' || Tk.fx === 'glitch' || Tk.theme === 2;
+    hemi.intensity = night ? 0.75 : 1.0; hemi.color.setHex(night ? 0xc8b8ff : 0xffffff); hemi.groundColor.setHex(0x8a7f70);
+    sun.intensity = night ? 0.25 : 0.45;
+    if (Tk.texData) {
+      const tex = pixelTex(canvasFromU32(Tk.texData, TEX, TEX), true);
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
+      const g = new THREE.PlaneGeometry(TEX, TEX); g.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ map: tex }));
+      m.position.set(TEX / 2, 0, TEX / 2);
+      floorGroup.add(m);
+      const tile = new Uint32Array(64 * 64);
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) tile[y * 64 + x] = Tk.sampleOutside(x, y);
+      const tt = pixelTex(canvasFromU32(tile, 64, 64), true), S = 9000;
+      tt.repeat.set(S / 64, S / 64);
+      const og = new THREE.PlaneGeometry(S, S); og.rotateX(-Math.PI / 2);
+      const om = new THREE.Mesh(og, new THREE.MeshLambertMaterial({ map: tt }));
+      om.position.set(TEX / 2, -0.08, TEX / 2);
+      floorGroup.add(om);
+    }
+    if (Tk.PTS && Tk.N) {
+      // raised kerbs right on the painted kerb stripes, in the map's kerb colours
+      floorGroup.add(edgeStrip(Tk, Tk.ROAD_W / 2 + 1.5, 3, 0.9, RS.curb || '#f2c418', RS.curbBase || '#1f1d1b', 1));
+      // a low wall on the barrier (where the invisible wall stops the karts), rail colours on top
+      floorGroup.add(edgeStrip(Tk, Tk.BARRIER + 1, 2, 3.2, RS.railDark || '#7a1c1c', RS.railDark || '#7a1c1c', 2));
+      floorGroup.add((() => { const m = edgeStrip(Tk, Tk.BARRIER + 1, 2.4, 0.5, RS.railTop || '#cf3a2c', RS.railTop || '#cf3a2c', 2); m.position.y = 3.2; return m; })());
+    }
+    if (Tk._bg) {
+      const PER = C().PER, HZ = C().HORIZON;
+      const bgTex = pixelTex(canvasFromU32(Tk._bg, PER, HZ), false);
+      const Rr = 2600, top = Rr * HZ / C().FOCAL, seg = 96;
+      const pos = [], uv = [], idx = [];
+      for (let i = 0; i <= seg; i++) {
+        const a = i / seg * Math.PI * 2, x = Math.cos(a) * Rr, z = Math.sin(a) * Rr, u = i / seg;
+        pos.push(x, 0, z, x, top, z); uv.push(u, 0, u, 1);
+        if (i < seg) { const b = i * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      floorSky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.DoubleSide, fog: false, depthWrite: false }));
+      floorSky.renderOrder = -1;
+      scene.add(floorSky);
+    }
+    scene.add(floorGroup);
+  }
+  function renderFloor(camX, camY, camA) {
+    if (!R.available) return false;
+    canvas.style.display = 'block';
+    canvas.style.imageRendering = 'pixelated';
+    const W2 = C().W * 2, H2 = C().H * 2;
+    if (cw !== W2 || ch !== H2) { cw = W2; ch = H2; renderer.setPixelRatio(1); renderer.setSize(W2, H2, false); }
+    const Tk = PK.Track;
+    if (floorMap !== Tk.current || floorTheme !== Tk.theme || !floorGroup) buildFloor();
+    // hide anything the full 3D view may have left in the scene
+    kartModels.forEach((m) => { m.visible = false; });
+    fxPool.forEach((s) => { s.visible = false; });
+    // camera = the Mode-7 camera: level, horizon at row HORIZON (lens shift instead of pitch)
+    const Hh = C().H, hz = C().HORIZON;
+    camera.aspect = C().W / Hh;
+    camera.fov = 2 * Math.atan((Hh / 2) / C().FOCAL) * 180 / Math.PI;
+    camera.updateProjectionMatrix();
+    camera.projectionMatrix.elements[9] = 2 * hz / Hh - 1;
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+    camera.position.set(camX, C().CAM_H, camY);
+    camera.lookAt(camX + Math.cos(camA) * 100, C().CAM_H, camY + Math.sin(camA) * 100);
+    if (floorSky) floorSky.position.set(camX, C().CAM_H - 2, camY);
+    sun.position.set(camX - 300, 600, camY + 200);
+    renderer.render(scene, camera);
+    return true;
+  }
+  R.renderFloor = renderFloor;
   function hide() { if (canvas) canvas.style.display = 'none'; }
   R.hide = hide;
 

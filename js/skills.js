@@ -369,6 +369,21 @@ window.PK = window.PK || {};
   // Rows of groceries (assets/food.png, 16 cells of 48x48) across the track: drive through one
   // for boost gauge; it respawns a few seconds later. Sprites are painted when the sheet loads.
   const FOOD_KO = ['사과', '바나나', '우유', '식빵', '소고기', '목살', '생선', '라면', '치즈', '케이크', '과자', '콜라', '컵케이크', '초코', '상추', '토마토'];
+  // food grades: 0 일반 · 1 고급 · 2 희귀 · 3 전설 — worth 1 / 2 / 3 / 5 coins, rarer on the road
+  //              사과 바나나 우유 식빵 소고기 목살 생선 라면 치즈 케이크 과자 콜라 컵케이크 초코 상추 토마토
+  const FOOD_GRADE = [0, 0, 1, 0, 3, 3, 2, 0, 1, 2, 0, 0, 1, 1, 0, 0];
+  const GRADES = [
+    { ko: '일반', en: '', col: '', coin: 1, w: 6 },
+    { ko: '고급', en: 'GOOD', col: '#4aa8ff', coin: 2, w: 3 },
+    { ko: '희귀', en: 'RARE', col: '#c070ff', coin: 3, w: 1.4 },
+    { ko: '전설', en: 'LEGEND', col: '#ffcc00', coin: 5, w: 0.6 },
+  ];
+  function pickKind(r) {   // weighted by grade (seeded, so every map keeps its layout)
+    let sum = 0; for (let i = 0; i < 16; i++) sum += GRADES[FOOD_GRADE[i]].w;
+    let x = r() * sum;
+    for (let i = 0; i < 16; i++) { x -= GRADES[FOOD_GRADE[i]].w; if (x < 0) return i; }
+    return 0;
+  }
   const FOOD_GAUGE = 25, FOOD_RESPAWN = 6, FOOD_R = 6;
   const FMAG_T = 6, FMAG_R = 70, FMAG_V = 150;   // shop item '음식 자석': duration / pull radius / speed
   let magKart = null, magT = 0;
@@ -381,7 +396,17 @@ window.PK = window.PK || {};
       const g = c.getContext('2d');
       g.imageSmoothingEnabled = false;
       g.clearRect(0, 0, 32, 32);
-      g.drawImage(foodImg, i * 48, 0, 48, 48, 0, 0, 32, 32);
+      const gd = GRADES[FOOD_GRADE[i]];
+      if (gd.col) {   // grade halo
+        const rg = g.createRadialGradient(16, 16, 4, 16, 16, 16);
+        rg.addColorStop(0, gd.col + 'cc'); rg.addColorStop(0.7, gd.col + '55'); rg.addColorStop(1, gd.col + '00');
+        g.fillStyle = rg; g.fillRect(0, 0, 32, 32);
+      }
+      g.drawImage(foodImg, i * 48, 0, 48, 48, 2, 2, 28, 28);
+      if (FOOD_GRADE[i] >= 2) {   // sparkles in the corners for 희귀 / 전설
+        g.fillStyle = '#ffffff';
+        for (const [x, y] of [[2, 3], [28, 5], [4, 27], [27, 28]]) { g.fillRect(x, y - 1, 1, 3); g.fillRect(x - 1, y, 3, 1); }
+      }
     });
     foodImg.src = 'assets/food.png';
   }
@@ -397,7 +422,7 @@ window.PK = window.PK || {};
       const a = t.TAN[i], p = t.PTS[i];
       for (const lat of [-11, 0, 11]) {
         const x = p[0] - Math.sin(a) * lat, y = p[1] + Math.cos(a) * lat;
-        foods.push({ x, y, hx: x, hy: y, kind: Math.floor(r() * 16), t: 0, ph: r() * TAU });
+        foods.push({ x, y, hx: x, hy: y, kind: pickKind(r), t: 0, ph: r() * TAU });
       }
     }
   }
@@ -447,7 +472,7 @@ window.PK = window.PK || {};
       const a = t.TAN[i], p = t.PTS[i];
       for (const lat of [-6, 6]) {
         const x = p[0] - Math.sin(a) * lat, y = p[1] + Math.cos(a) * lat;
-        foods.push({ x, y, hx: x, hy: y, kind: Math.floor(r() * 16), t: 0, ph: r() * TAU, extra: true });
+        foods.push({ x, y, hx: x, hy: y, kind: pickKind(r), t: 0, ph: r() * TAU, extra: true });
       }
     }
   }
@@ -460,6 +485,7 @@ window.PK = window.PK || {};
   const saleLeft = () => saleT;
   const foodIcon = (i) => foodSpr[i | 0] || null;
   const foodName = (i) => FOOD_KO[i | 0] || '';
+  const foodGrade = (i) => GRADES[FOOD_GRADE[i | 0] || 0];   // { ko, en, col, coin }
   // kinds of the regular food rows on the current track (not the sale extras), each once
   const foodKinds = () => { const s = []; for (const f of foods) if (!f.extra && s.indexOf(f.kind) < 0) s.push(f.kind); return s; };
 
@@ -1529,5 +1555,5 @@ window.PK = window.PK || {};
   function giveBox(k, id) { if (!k || !BOX[id]) return false; k.boxItem = id; k.boxRoll = 0; S(k).boxSince = -1; return true; }
   const boxInfo = () => ({ boxes: boxes.length, active: boxes.filter((b) => !(b.t > 0)).length, missiles: missiles.length, rows: boxes.map((b) => b.i) });
   PK.Skills = { DEFS, ITEMS, ITEM_IDS, BOX, BOX_IDS, BOX_ROLL, init, reset, tryUse, useItem, useBox, giveBox, boxWeights, boxInfo, incoming,
-    itemMagnet, startSale, saleLeft, foodIcon, foodName, foodKinds, update, aiWants, sprites };
+    itemMagnet, startSale, saleLeft, foodIcon, foodName, foodGrade, foodKinds, update, aiWants, sprites };
 })(window.PK);

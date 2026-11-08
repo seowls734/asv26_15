@@ -175,6 +175,12 @@ window.PK = window.PK || {};
   // Set to true (and load three.js + render3d.js in index.html) to bring the 3D map back.
   let view3d = false;
   const use3d = () => view3d && PK.R3D && PK.R3D.available;
+  // 🧊 3D floor (default on): the ground / kerbs / walls / sky in WebGL under the usual pixel billboards
+  const LS_FLOOR3D = 'pk_floor3d';
+  let floor3d = true;
+  const useFloor3d = () => floor3d && PK.R3D && PK.R3D.available && PK.R3D.renderFloor;
+  function refreshFloorBtn() { const b = document.getElementById('btnFloor3d'); if (b) { b.textContent = '🧊 3D 바닥: ' + (floor3d ? '켬' : '끔'); b.style.display = PK.R3D && PK.R3D.available ? '' : 'none'; } }
+  function toggleFloor3d() { floor3d = !floor3d; lsSet(LS_FLOOR3D, floor3d ? '1' : '0'); refreshFloorBtn(); }
   function toggleEasy() {
     easy = !easy;
     lsSet(LS_EASY, easy ? '1' : '0');
@@ -278,6 +284,7 @@ window.PK = window.PK || {};
   function goModes() { G.state = 'modes'; G.attract = true; showOnly('modes'); }
   function goSettings() {
     G.state = 'settings'; G.attract = true; showOnly('settings');
+    refreshFloorBtn();
     const jc = document.getElementById('btnJoyCfg'); if (jc) jc.style.display = document.getElementById('btnCfg') ? '' : 'none';
   }
   function goGhostMode() { ghostMode = true; gp = null; goMaps(); }
@@ -357,6 +364,7 @@ window.PK = window.PK || {};
       mtest: document.getElementById('mtest'), mtList: document.getElementById('mtList'),
       ovt: document.getElementById('ovt'),
     };
+    floor3d = lsGet(LS_FLOOR3D) !== '0';
     calm = lsGet(LS_CALM) !== '0';   // calm (no shake / flicker) is on unless the player turned it off
     easy = lsGet(LS_EASY) !== '0';   // easy controls too
     // console/test access to the wallet + shop
@@ -416,7 +424,7 @@ window.PK = window.PK || {};
       { msg: k ? '↑ 가속 · ← → 방향 · ↓ 브레이크' : '조이스틱으로 가속하고 방향을 바꿔요', done: (p) => Math.abs(p.v) > 50, hold: 1, max: 8 },
       { msg: k ? '🌀 커브에서 Space 를 누른 채 방향키 → 드리프트! 불꽃이 커지면 놓아서 미니 터보' : '🌀 커브에서 드리프트 버튼을 누른 채 꺾기 → 불꽃이 커지면 놓아서 미니 터보', done: () => rstat.mt > 0, max: 16 },
       { msg: k ? '⚡ 부스터 게이지가 차면 Z 로 부스터!' : '⚡ 부스터 게이지가 차면 부스터 버튼!', done: (p) => p.boostT > 0.6 && !(p._mtBurst > 0), max: 10 },
-      { msg: '🍎 길 위의 음식을 먹으면 코인! (한 판에 10개까지)', done: () => foodRace > 0, max: 8 },
+      { msg: '🍎 음식을 먹으면 코인! 빛나는 음식은 더 비싸요 (한 판에 10코인까지)', done: () => foodRace > 0, max: 8 },
       { msg: k ? '✨ X 는 캐릭터마다 다른 고유 스킬 · 벽과 풀밭은 느려져요!' : '✨ 스킬 버튼은 캐릭터마다 달라요 · 벽과 풀밭은 느려져요!', done: () => false, max: 5 },
     ];
   }
@@ -655,12 +663,35 @@ window.PK = window.PK || {};
       if (got) { ctx.fillStyle = '#7dff9a'; ctx.fillRect(x + 6, y + 6, 4, 4); ctx.fillStyle = '#0a2a12'; ctx.fillRect(x + 7, y + 7, 2, 2); }
     }
   }
+  // 🎬 cutscene sounds (js/intro.js calls PK.Intro.sound): typewriter blips per speaker, a store
+  // chime for the announcements, a fridge thump, footsteps on the street, a whoosh between scenes,
+  // and the calm chiptune loop (PK.Music '-1') underneath. Menus stay quiet as before.
+  const VOICE = { '나': [600, 'square'], '점원': [760, 'square'], '안내 방송': [520, 'triangle'], '': [340, 'triangle'] };
+  function cutSound(ev, a, b) {
+    if (!ac || G.muted) return;
+    try {
+      if (ev === 'type') {
+        const v = VOICE[a] || VOICE['나'], f = v[0] * (0.94 + Math.random() * 0.12);
+        tone(v[1], f, f, 0.035, a ? 0.05 : 0.035);
+      } else if (ev === 'line') {
+        if (a === '안내 방송') { tone('sine', 988, 988, 0.35, 0.12); tone('sine', 784, 784, 0.5, 0.12, 0.28); }   // 딩동~
+        else if (/냉장고/.test(b || '')) { tone('sine', 70, 55, 0.5, 0.18); noise(0.08, 0.12, 900, 0.02); }      // fridge door
+        else if (/삑/.test(b || '')) { [0, 0.25, 0.5].forEach((d) => tone('square', 1760, 1760, 0.08, 0.07, d)); } // scanner
+        else if (/지글/.test(b || '')) noise(1.2, 0.07, 5200);                                                 // sizzling
+      } else if (ev === 'scene') {
+        noise(0.35, 0.06, 1400);                                                                               // whoosh
+        if (b === 'intro' && a === 1) for (let i = 0; i < 8; i++) tone('triangle', 150, 90, 0.07, 0.07, 0.4 + i * 0.32);   // footsteps
+        if (b === 'intro' && a === 2) { tone('sine', 1319, 1319, 0.2, 0.06, 0.2); tone('sine', 1047, 1047, 0.3, 0.06, 0.38); } // store door
+      }
+    } catch (e) { /* ignore */ }
+  }
   // ---- cutscene runner (js/intro.js)
   function playScript(name, ctx, done) {
     if (!PK.Intro) { setTimeout(done, 0); return; }
     G.state = 'intro'; G.attract = true;
     showOnly('intro');
-    musicStop();
+    PK.Intro.sound = cutSound;
+    musicPlay(-1);
     PK.Intro.play(name, ctx, uiBeep, done);
   }
 
@@ -668,9 +699,7 @@ window.PK = window.PK || {};
   // Plays once on first launch (pk_intro_v2), again from the title's '오프닝 다시 보기'.
   function playIntro() {
     if (!PK.Intro) return;
-    G.state = 'intro'; G.attract = true;
-    showOnly('intro');
-    PK.Intro.play('intro', {}, uiBeep, goTitle);
+    playScript('intro', {}, goTitle);   // with the cutscene sounds + music
   }
   function showOnly(which) {
     show(el.title, which === 'title'); show(el.select, which === 'select'); show(el.maps, which === 'maps');
@@ -1059,7 +1088,7 @@ window.PK = window.PK || {};
   // own generated tracks (PK.Music). A new race restarts the song; the last lap plays it a bit faster.
   const BGM_SRC = 'assets/music/velocity_bloom.mp3', BGM_VOL = 0.5;
   let bgm = null, bgmGain = null, bgmRestart = true;
-  const bgmFor = (id) => id !== null && id !== undefined && id !== GHOST_MAP && id !== GLITCH_MAP;
+  const bgmFor = (id) => id !== null && id !== undefined && id !== -1 && id !== GHOST_MAP && id !== GLITCH_MAP;   // -1 = cutscene loop
   function bgmInit() {
     if (bgm || !ac || !master) return;
     try {
@@ -1378,18 +1407,25 @@ window.PK = window.PK || {};
       c.appendChild(cv);
       c.appendChild(mk('b', null, have ? PK.Skills.foodName(i) : '???'));
       c.appendChild(mk('small', null, have ? d[i] + '번 먹음' : '미발견'));
+      const gd = PK.Skills.foodGrade && PK.Skills.foodGrade(i);
+      if (gd) { const gb = mk('i', 'dgrade g' + FOOD_GRADE_IDX(gd), gd.ko + ' · ' + gd.coin + '코인'); c.appendChild(gb); if (gd.col) c.style.borderColor = gd.col; }
       list.appendChild(c);
     }
   }
 
-  // player ate a food: +1 coin up to FOOD_CAP per race; also fills the 음식 도감
+  const FOOD_GRADE_IDX = (gd) => ['일반', '고급', '희귀', '전설'].indexOf(gd.ko);
+  // player ate a food: grade coins up to FOOD_CAP per race; also fills the 음식 도감
   function onFood(k, kind) {
     if (G.attract || !k.isPlayer || G.state !== 'race') return;
     dexRecord(kind);
     shopListFood(kind);
+    // grade: 일반 1 · 고급 2 · 희귀 3 · 전설 5 coins (still at most FOOD_CAP coins a race)
+    const gd = (PK.Skills.foodGrade && PK.Skills.foodGrade(kind)) || { coin: 1, en: '' };
+    if (gd.coin >= 5 && !G.attract) { sfx('sale'); speedBurst = Math.max(speedBurst, 0.2); }
+    else if (gd.coin >= 3) sfx('gauge');
     if (foodRace < FOOD_CAP) {
-      foodRace++;
-      toast(foodRace >= FOOD_CAP ? 'FOOD ' + FOOD_CAP + '/' + FOOD_CAP + ' MAX!' : '+1 FOOD ' + foodRace + '/' + FOOD_CAP);
+      foodRace = Math.min(FOOD_CAP, foodRace + gd.coin);
+      toast(foodRace >= FOOD_CAP ? 'FOOD ' + FOOD_CAP + '/' + FOOD_CAP + ' MAX!' : '+' + gd.coin + (gd.en ? ' ' + gd.en + '!' : ' FOOD') + ' ' + foodRace + '/' + FOOD_CAP);
       if (foodRace >= FOOD_CAP && !testMode) achGrant('full_cart');
     } else toast('FOOD FULL ' + FOOD_CAP + '/' + FOOD_CAP);
   }
@@ -1968,6 +2004,7 @@ window.PK = window.PK || {};
     on(el.btnItem, () => { ensureAudio(); cycleItem(); });
     on(el.btnCalm, () => { ensureAudio(); toggleCalm(); });
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
+    on(document.getElementById('btnFloor3d'), () => { ensureAudio(); uiBeep(1); toggleFloor3d(); });
     on(document.getElementById('btnIntro'), () => { ensureAudio(); uiBeep(1); playIntro(); });
     on(document.getElementById('btnGP'), () => { ensureAudio(); uiBeep(1); goGP(); });
     on(document.getElementById('finLobby'), () => { ensureAudio(); uiBeep(0); finBarOn = false; document.getElementById('finBar').classList.remove('on'); gp = null; goTitle(); });
@@ -2513,6 +2550,20 @@ window.PK = window.PK || {};
       canvas.style.background = 'transparent';
       ctx.clearRect(0, 0, W, H);
       try { PK.R3D.render(G, camX, camY, camA); } catch (e) { view3d = false; }   // broken 3D -> 2D
+    } else if (useFloor3d()) {
+      // 3D floor underneath (WebGL canvas behind this one), pixel billboards + overlays on top
+      let ok = false;
+      try { ok = PK.R3D.renderFloor(camX, camY, camA); } catch (e) { ok = false; }
+      if (!ok) { floor3d = false; refreshFloorBtn(); }
+      canvas.style.background = 'transparent';
+      ctx.clearRect(0, 0, W, H);
+      let ox = 0, oy = 0;
+      if (shakeT > 0) { ox = Math.round((Math.random() * 2 - 1) * shakeMag); oy = Math.round((Math.random() * 2 - 1) * shakeMag); }
+      ctx.save();
+      if (ox || oy) ctx.translate(ox, oy);
+      drawBillboards();
+      drawParts();
+      ctx.restore();
     } else {
       if (PK.R3D && PK.R3D.hide) PK.R3D.hide();
       canvas.style.background = '';

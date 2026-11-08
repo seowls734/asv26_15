@@ -250,6 +250,8 @@
   .dcard b { display: block; font-weight: 700; color: #fff; margin-top: .1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .dcard small { color: #ffcc00; }
   .dcard.no { background: #160f22; }
+  .dgrade { display: block; font-style: normal; font-size: .85em; margin-top: .1em; color: #c8bce0; }
+  .dgrade.g1 { color: #7cc4ff; } .dgrade.g2 { color: #d8a0ff; } .dgrade.g3 { color: #ffd84a; }
   .dcard.no b { color: #6d5a8c; }
   #dexInfo .full { color: #7dff9a; }
   #coins, .wallet { margin-top: .3em; font-size: .85em; color: #ffe14d; text-shadow: .1em .1em 0 #000; }
@@ -330,6 +332,7 @@
     <div class="stitle">⚙ 설정</div>
     <div class="mlist">
       <button id="btnEasy" class="btn alt">🎮 쉬운 조작: 켬</button>
+      <button id="btnFloor3d" class="btn alt">🧊 3D 바닥: 켬</button>
       <button id="btnCalm" class="btn alt">🌙 화면 흔들림 줄이기: 끔</button>
       <button id="btnJoyCfg" class="btn alt" style="display:none">🕹 조이스틱 · 버튼 크기</button>
       <button id="btnIntro" class="btn alt">🎬 오프닝 다시 보기</button>
@@ -444,7 +447,7 @@
     <div class="row">
       <button id="btnShopBack" class="btn alt">← 뒤로</button>
     </div>
-    <div class="hint">음식 1개 = 코인 1 (레이스당 최대 10개, 완주하면 적립) · 장착한 아이템은 레이스마다 1번, C 키로 사용 · 1~4 / Q 칸 바꾸기 · 방향키 + Enter 구매 · E 장착 · Esc 뒤로</div>
+    <div class="hint">음식 등급별 코인: 일반 1 · 고급 2 · 희귀 3 · 전설 5 (레이스당 최대 10코인, 완주하면 적립) · 장착한 아이템은 레이스마다 1번, C 키로 사용 · 1~4 / Q 칸 바꾸기 · 방향키 + Enter 구매 · E 장착 · Esc 뒤로</div>
   </div>
 
   <!-- 캐릭터 테스트 -->
@@ -515,6 +518,8 @@
 <script src="js/rank.js"></script>
 <!-- online 2P: PeerJS (WebRTC + free PeerJS cloud signalling); async so a slow/blocked CDN never delays the game -->
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.2/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/render3d.js"></script>
 <script src="js/intro.js"></script>
 <script src="js/main.js"></script>
 <script src="js/net.js"></script>

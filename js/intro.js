@@ -606,14 +606,18 @@ window.PK = window.PK || {};
   // flow
   // ---------------------------------------------------------------------------
   const curLine = () => SCENES[si].lines[li];
+  // sound hook (set by main.js): 'line' (speaker, text) · 'type' (speaker) · 'scene' (index, script)
+  const snd = (ev, a, b) => { try { if (PK.Intro.sound) PK.Intro.sound(ev, a, b); } catch (e) { /* ignore */ } };
+  let typed = 0;
 
   function setLine() {
     const ln = curLine();
     el.name.textContent = ln[0];
     el.name.style.display = ln[0] ? '' : 'none';
     el.box.classList.toggle('narr', !ln[0]);
-    shown = 0; lineT = 0;
+    shown = 0; lineT = 0; typed = 0;
     el.text.textContent = '';
+    snd('line', ln[0], ln[1]);
   }
 
   function advance() {
@@ -648,13 +652,16 @@ window.PK = window.PK || {};
       if (leaving <= 0) {
         leaving = 0;
         if (si + 1 >= SCENES.length) { finish(); return; }
-        si++; li = 0; sceneT = 0; fadeIn = FADE; setLine();
+        si++; li = 0; sceneT = 0; fadeIn = FADE; snd('scene', si, script); setLine();
       }
     }
     const txt = curLine()[1];
     if (shown < txt.length && fadeIn <= 0) {
       shown = Math.min(txt.length, shown + dt * CPS);
       el.text.textContent = txt.slice(0, Math.floor(shown));
+      // a soft blip every other letter (spaces / dots are silent)
+      const nowN = Math.floor(shown);
+      if (nowN > typed) { const ch = txt[nowN - 1]; if (ch && !/[\s.…,!?~(\)]/.test(ch) && nowN % 2 === 0) snd('type', curLine()[0]); typed = nowN; }
     }
     el.next.style.visibility = shown >= txt.length && !leaving ? 'visible' : 'hidden';
 
@@ -703,6 +710,7 @@ window.PK = window.PK || {};
       markSeen = script === 'intro' && ctx.scene == null;
       beep = beepFn; onDone = done;
       active = true; si = start; li = 0; sceneT = 0; leaving = 0; fadeIn = FADE; last = -1;
+      snd('scene', si, script);
       setLine();
       el.root.classList.add('on');
       requestAnimationFrame(frame);
