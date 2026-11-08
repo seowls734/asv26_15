@@ -2026,7 +2026,7 @@ window.PK = window.PK || {};
     T._noProp = (x, y) => {
       for (const s of spurs) {
         const dx = x - s.x0, dy = y - s.y0, al = dx * s.nx + dy * s.ny, pp = dx * s.tx + dy * s.ty;
-        if (al > B - 6 && al < B + s.L + 12 && Math.abs(pp) < 24) return true;
+        if (al > B - 10 && al < B + s.L + 12 && Math.abs(pp) < (al < B + 18 ? 52 : 30)) return true;
       }
       return false;
     };
@@ -2090,13 +2090,13 @@ window.PK = window.PK || {};
     for (const s of T._spurs || []) {
       const a = [s.x0 + s.nx * (B - 8), s.y0 + s.ny * (B - 8)], e = [s.x0 + s.nx * (B + s.L - 8), s.y0 + s.ny * (B + s.L - 8)];
       g.lineCap = 'round';
-      for (const [w, col] of [[30, '#3e2e20'], [27, '#cfc6b0'], [23, '#b4a080']]) {
+      for (const [w, col] of [[38, '#3e2e20'], [35, '#cfc6b0'], [31, '#b4a080']]) {
         g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(e[0], e[1]); g.stroke();
         g.fillStyle = col; g.beginPath(); g.arc(e[0], e[1], w * 0.5 + 6, 0, Math.PI * 2); g.fill();
       }
       const rnd = PK.U.rng(s.i * 31 + 7);
       for (let k = 0; k < 160; k++) {
-        const al = B - 6 + rnd() * (s.L + 8), pp = (rnd() - 0.5) * 22;
+        const al = B - 6 + rnd() * (s.L + 8), pp = (rnd() - 0.5) * 30;
         g.fillStyle = rnd() < 0.5 ? '#9a8668' : '#d4c6a8';
         g.fillRect(Math.round(s.x0 + s.nx * al + s.tx * pp), Math.round(s.y0 + s.ny * al + s.ty * pp), 1, 1);
       }
@@ -2106,10 +2106,12 @@ window.PK = window.PK || {};
   // gravel grain + raked stripes on the maze path
   function road6(g, T) {
     const B0 = T.BARRIER, RW = T.ROAD_W;
-    for (const s of T._spurs || []) {   // the corridors' mouths cut through the border
-      const a = [s.x0 + s.nx * (RW / 2 - 6), s.y0 + s.ny * (RW / 2 - 6)], e = [s.x0 + s.nx * (B0 + 6), s.y0 + s.ny * (B0 + 6)];
-      for (const [w, col] of [[30, '#3e2e20'], [27, '#cfc6b0'], [23, '#b4a080']]) {
-        g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'butt'; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(e[0], e[1]); g.stroke();
+    for (const s of T._spurs || []) {   // the corridors' funnel-shaped mouths cut through the border
+      const at = (al, pp) => [s.x0 + s.nx * al + s.tx * pp, s.y0 + s.ny * al + s.ty * pp];
+      for (const [grow, col] of [[3, '#3e2e20'], [1.5, '#cfc6b0'], [0, '#b4a080']]) {
+        const a0 = RW / 2 - 4, a1 = B0 + 14, w0 = 15 + (B0 + 14 - a0) * 1.4 + grow, w1 = 15 + grow;
+        const q = [at(a0, -w0), at(a1, -w1), at(a1 + 6, -w1), at(a1 + 6, w1), at(a1, w1), at(a0, w0)];
+        g.fillStyle = col; g.beginPath(); g.moveTo(q[0][0], q[0][1]); for (let i = 1; i < q.length; i++) g.lineTo(q[i][0], q[i][1]); g.closePath(); g.fill();
       }
     }
     const P = T.PTS, TAN = T.TAN, N = T.N, rnd = PK.U.rng(6161), half = T.ROAD_W / 2 - 3;
@@ -2343,7 +2345,10 @@ window.PK = window.PK || {};
           for (let l = -B; l <= B; l += 2) mark(x - Math.sin(t) * l, y + Math.cos(t) * l);
         }
       }
-      for (const s of this._spurs || []) for (let al = this.BARRIER - 4; al < this.BARRIER + s.L; al += 2) for (let pp = -12; pp <= 12; pp += 2) mark(s.x0 + s.nx * al + s.tx * pp, s.y0 + s.ny * al + s.ty * pp);
+      for (const s of this._spurs || []) for (let al = this.ROAD_W / 2 - 4; al < this.BARRIER + s.L; al += 2) {
+        const hw = 15 + Math.max(0, this.BARRIER + 14 - al) * 1.4;
+        for (let pp = -hw; pp <= hw; pp += 2) mark(s.x0 + s.nx * al + s.tx * pp, s.y0 + s.ny * al + s.ty * pp);
+      }
       return grid;
     },
     // can you see from (x0,y0) to (x1,y1) without a hedge in between? (maze only; true elsewhere)
@@ -2363,7 +2368,7 @@ window.PK = window.PK || {};
       if (!sp || !sp.length) return null;
       for (const s of sp) {
         const dx = x - s.x0, dy = y - s.y0, al = dx * s.nx + dy * s.ny, pp = dx * s.tx + dy * s.ty;
-        if (al > B - 4 && al < B + s.L + 8 && Math.abs(pp) < 18) return { s, al, pp };
+        if (al > this.ROAD_W / 2 - 2 && al < B + s.L + 8 && Math.abs(pp) < 21 + Math.max(0, B + 14 - al) * 1.4) return { s, al, pp };
       }
       return null;
     },

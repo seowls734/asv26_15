@@ -1135,13 +1135,15 @@ window.PK = window.PK || {};
     k.offroad = Math.abs(r.lat) > T.OFFROAD_D;
 
     // maze side corridors: inside one, its own walls hold the kart instead of the invisible wall
-    const sp = T.spurAt && Math.abs(r.lat) > T.BARRIER - 6 ? T.spurAt(k.x, k.y) : null;
+    const sp = T.spurAt && Math.abs(r.lat) > T.ROAD_W / 2 - 2 ? T.spurAt(k.x, k.y) : null;
     if (sp) {
       k.offroad = false;
-      const s = sp.s, HW = 10, end = T.BARRIER + s.L - 6;
-      let al = sp.al, pp = sp.pp, hit = false;
-      if (Math.abs(pp) > HW) { pp = Math.sign(pp) * HW; hit = true; }
+      // corridor half width 15, wider in the funnel-shaped mouth: entering at an angle slides you in
+      const s = sp.s, B = T.BARRIER, end = B + s.L - 6, HW = 15 + Math.max(0, B + 14 - sp.al) * 1.4;
+      let al = sp.al, pp = sp.pp, hit = false, nudge = false;
+      if (al > B - 2 && Math.abs(pp) > HW) { pp = Math.sign(pp) * HW; if (al > B + 14) hit = true; else nudge = true; }
       if (al > end) { al = end; hit = true; }
+      if (nudge) { k.x = s.x0 + s.nx * al + s.tx * pp; k.y = s.y0 + s.ny * al + s.ty * pp; }
       if (hit) {
         k.x = s.x0 + s.nx * al + s.tx * pp; k.y = s.y0 + s.ny * al + s.ty * pp;
         if (k._bumpT <= 0 && Math.abs(k.v) > 25) { k.v *= 0.7; k._bumpT = 0.35; sfx(G, k, 'bump'); if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; } }
