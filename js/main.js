@@ -16,7 +16,7 @@ window.PK = window.PK || {};
   const AI_SPEED = 1.15;                                          // AI rivals run 1.15× the player's speed
   // the cup rotation: every non-secret map in PK.Track.MAPS (0–3, plus any new ones such as the maze map)
   let REGULAR = [0, 1, 2, 3];
-  const NORMAL_KARTS = [0, 1, 2, 3, 4, 5], GHOST_KARTS = [6, 7];   // vampire + ghost join the ghost map
+  const NORMAL_KARTS = [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13], GHOST_KARTS = [6, 7];   // rivals come from NORMAL_KARTS   // vampire + ghost join the ghost map
   // the ghost kart (7) becomes playable: top 3 on the ghost map gives a 50% chance to win it
   const GHOST_KART = 7, LS_GHOST_KART = 'pk_ghost_kart', GHOST_REWARD_PLACE = 3, GHOST_REWARD_CHANCE = 0.5;
   // glitch map (PK.Track map 5): 1% roll before the ghost roll, hard AI; 1st place unlocks the glitch kart (8)
@@ -89,6 +89,11 @@ window.PK = window.PK || {};
     { def: 4, key: 'pk_own_kart_4', price: 20 },
     { def: 5, key: 'pk_own_kart_5', price: 25 },
     { def: 6, key: 'pk_own_kart_6', price: 50 },   // 뱀파이어: the only special character for sale
+    { def: 9, key: 'pk_own_kart_9', price: 30 },    // 요리사
+    { def: 10, key: 'pk_own_kart_10', price: 35 },  // 할머니
+    { def: 11, key: 'pk_own_kart_11', price: 40 },  // 로봇
+    { def: 12, key: 'pk_own_kart_12', price: 45 },  // 고양이
+    { def: 13, key: 'pk_own_kart_13', price: 55 },  // 닌자
   ];
   const charOwned = (c) => lsGet(c.key) === '1';
   // everyday cart bodies (cosmetic, PK.Karts.BODIES): the shopping cart is free, the rest are bought
@@ -854,7 +859,8 @@ window.PK = window.PK || {};
       const c = mk('div', 'icard char' + (have ? ' eq' : ''));
       c.dataset.sid = 'char:' + ch.def;
       const hd = mk('div', 'ihead');
-      const cv = copyCanvas(PK.Karts.sprite(ch.def, true), d.color, 16, 12);
+      const cv = copyCanvas(PK.Karts.portrait ? PK.Karts.portrait(ch.def) : PK.Karts.sprite(ch.def, true), d.color, 16, 16);
+      cv.className = 'portrait'; cv.style.background = d.color;
       hd.appendChild(cv);
       const nm = mk('div', 'iname', '캐릭터 · ' + d.nameKo);
       nm.appendChild(mk('small', null, have ? '보유 중' : '🍎 ' + ch.price));
@@ -911,7 +917,8 @@ window.PK = window.PK || {};
       const hd = mk('div', 'ihead');
       let spr = null;
       try { spr = PK.Karts.decoSprite ? PK.Karts.decoSprite(dc.kind, dc.id, selIdx) : null; } catch (e) { spr = null; }
-      hd.appendChild(copyCanvas(spr, '#9aa6ad', 16, 12));
+      const wi = dc.kind === 'wheel' && PK.Karts.wheelIcon ? PK.Karts.wheelIcon(dc.id) : null;
+      if (wi) { wi.className = 'portrait'; hd.appendChild(wi); } else hd.appendChild(decoCrop(spr, dc.kind));
       const nm = mk('div', 'iname', DECO_KO[dc.kind] + ' · ' + dc.nameKo);
       nm.appendChild(mk('small', null, have ? (on ? '장착 중' : '보유 중') : '🍎 ' + price));
       hd.appendChild(nm);
@@ -934,6 +941,14 @@ window.PK = window.PK || {};
     });
     shopSel = U.clamp(shopSel, 0, Math.max(0, shopCards.length - 1));
     refreshShopSel();
+  }
+  // the part of a deco preview that shows the item: the head + hat, the flag, or the wheels
+  const DECO_CROP = { hat: [9, 0, 30, 18], flag: [32, 0, 16, 18], wheel: [0, 40, 48, 18] };
+  function decoCrop(spr, kind) {
+    const r = DECO_CROP[kind] || [0, 0, 48, 58], out = document.createElement('canvas');
+    out.width = r[2]; out.height = r[3]; out.className = 'portrait';
+    if (spr) { const g = out.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(spr, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]); }
+    return out;
   }
   function wearDeco(kind, id) {
     const o = decoWorn();
@@ -1035,8 +1050,8 @@ window.PK = window.PK || {};
     defs.forEach((d, i) => {
       const b = mk('button', 'btn alt tchar' + (i === testKart ? ' sel' : ''));
       let spr = null;
-      try { spr = PK.Karts.sprite(i, true); } catch (e) { spr = null; }
-      const cv = copyCanvas(spr, d.color, 16, 12); cv.className = 'kspr';
+      try { spr = PK.Karts.portrait ? PK.Karts.portrait(i) : PK.Karts.sprite(i, true); } catch (e) { spr = null; }
+      const cv = copyCanvas(spr, d.color, 16, 16); cv.className = 'kspr portrait'; cv.style.background = d.color;
       b.appendChild(cv);
       const nm = mk('b', null, d.nameKo); nm.style.color = d.color;
       b.appendChild(nm);
@@ -2089,8 +2104,8 @@ window.PK = window.PK || {};
       const card = mk('div', 'card');
       const head = mk('div', 'khead');
       let spr = null;
-      try { spr = PK.Karts.sprite(i, true); } catch (e) { spr = null; }
-      const cv = copyCanvas(spr, d.color, 16, 12); cv.className = 'kspr';
+      try { spr = PK.Karts.portrait ? PK.Karts.portrait(i) : PK.Karts.sprite(i, true); } catch (e) { spr = null; }
+      const cv = copyCanvas(spr, d.color, 16, 16); cv.className = 'kspr portrait'; cv.style.background = d.color;
       head.appendChild(cv);
       const nm = mk('div', 'kname', d.nameKo);
       nm.style.color = d.color;

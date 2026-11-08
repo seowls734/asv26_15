@@ -40,12 +40,12 @@ window.PK = window.PK || {};
   // ch = character driver shown for both AI and player (see CHARS).
   // ---------------------------------------------------------------------------
   const RAW = [
-    { name: 'RED', nameKo: '레드', color: '#e03a3a', weight: 3, skill: 'cart_rush', desc: '속도와 핸들링이 균형 잡힌 올라운더 카트' },
-    { name: 'BLU', nameKo: '블루', color: '#3a6ee8', weight: 2, skill: 'banana', desc: '가속이 좋고 다루기 쉬운 경쾌한 카트' },
-    { name: 'GRN', nameKo: '그린', color: '#3cb84a', weight: 4, skill: 'watermelon', desc: '묵직하고 최고 속도가 높은 파워 카트' },
-    { name: 'YEL', nameKo: '옐로', color: '#f2c82c', weight: 1, skill: 'soap', desc: '가볍고 코너링이 날카로운 초경량 카트' },
-    { name: 'PNK', nameKo: '핑크', color: '#f06aa8', weight: 2, skill: 'bubble', desc: '민첩한 가속과 부드러운 드리프트의 카트' },
-    { name: 'BLK', nameKo: '블랙', color: '#2a2a33', weight: 5, skill: 'magnet', desc: '최고 속도와 몸싸움 최강, 대신 굼뜬 중전차' },
+    { name: 'RED', nameKo: '레드', color: '#e03a3a', weight: 3, skill: 'cart_rush', drv: ['#3b2a20', '#7d8592', '#f1c9a0', 'hero'], desc: '속도와 핸들링이 균형 잡힌 올라운더 카트' },
+    { name: 'BLU', nameKo: '블루', color: '#3a6ee8', weight: 2, skill: 'banana', drv: ['#5a3420', '#3a6ee8', '#e2b48a', 'cap', '#2a4ab8'], desc: '가속이 좋고 다루기 쉬운 경쾌한 카트' },
+    { name: 'GRN', nameKo: '그린', color: '#3cb84a', weight: 4, skill: 'watermelon', drv: ['#1c1c22', '#3cb84a', '#f1c9a0', 'pony'], desc: '묵직하고 최고 속도가 높은 파워 카트' },
+    { name: 'YEL', nameKo: '옐로', color: '#f2c82c', weight: 1, skill: 'soap', drv: ['#e8c050', '#f2c82c', '#f6d6b8', 'bun'], desc: '가볍고 코너링이 날카로운 초경량 카트' },
+    { name: 'PNK', nameKo: '핑크', color: '#f06aa8', weight: 2, skill: 'bubble', drv: ['#f06aa8', '#f8a8c8', '#f1c9a0', 'pony'], desc: '민첩한 가속과 부드러운 드리프트의 카트' },
+    { name: 'BLK', nameKo: '블랙', color: '#2a2a33', weight: 5, skill: 'magnet', drv: ['#d8d8d8', '#2a2a33', '#d9a878', ''], desc: '최고 속도와 몸싸움 최강, 대신 굼뜬 중전차' },
     // World 2 characters
     { name: 'VAMP', nameKo: '뱀파이어', color: '#8a1c2b', weight: 4, skill: 'bats', ch: 'vamp', grip: '#e8c040',
       tune: { maxV: 4, acc: 8 }, desc: '묵직한 차체에 날카로운 가속, 밤을 달리는 귀족 카트' },
@@ -53,7 +53,18 @@ window.PK = window.PK || {};
       tune: { mass: -15, turn: 0.1, grip: -0.3, boostPow: 0.02 }, desc: '깃털처럼 가볍고 둥실둥실 미끄러지는 초민첩 카트' },
     // secret: won by finishing 1st on the glitch map
     { name: 'GLITCH', nameKo: '글리치', color: '#00e8b8', weight: 3, skill: 'teleport', ch: 'glitch', grip: '#ff40d0',
-      tune: { maxV: 4, acc: 8, turn: 0.08 }, desc: '버그로 태어난 카트. 모든 능력이 평균 이상, 가끔 화면이 깨진다' }
+      tune: { maxV: 4, acc: 8, turn: 0.08 }, desc: '버그로 태어난 카트. 모든 능력이 평균 이상, 가끔 화면이 깨진다' },
+    // shop characters (9..13)
+    { name: 'CHEF', nameKo: '요리사', color: '#e8e8ee', weight: 3, skill: 'watermelon', ch: 'chef', grip: '#d8382f',
+      desc: '푸드코트 요리사. 수박을 휙휙 던진다' },
+    { name: 'GRAN', nameKo: '할머니', color: '#8a5ac8', weight: 4, skill: 'magnet', drv: ['#d0d0d4', '#7a4aa8', '#efc7a4', 'bun'], grip: '#f0e0ff',
+      tune: { grip: 0.3 }, desc: '할인 자석으로 앞 카트를 끌어당기는 장보기 고수' },
+    { name: 'ROBO', nameKo: '로봇', color: '#7a8290', weight: 5, skill: 'cart_rush', ch: 'robot', grip: '#ff4040',
+      tune: { acc: 6 }, desc: '강철 몸으로 들이받는 재고 정리 로봇' },
+    { name: 'CAT', nameKo: '고양이', color: '#f09a3a', weight: 1, skill: 'banana', ch: 'cat', grip: '#fff0d8',
+      tune: { turn: 0.06 }, desc: '가볍고 날렵한 마트 고양이. 바나나를 흘리고 다닌다' },
+    { name: 'NINJA', nameKo: '닌자', color: '#3a3a48', weight: 2, skill: 'phase', ch: 'ninja', grip: '#d8382f',
+      tune: { acc: 6 }, desc: '순식간에 사라졌다 나타나는 그림자 닌자' }
   ];
   const DEFS = RAW.map((r, i) => {
     const w = r.weight, t = r.tune || {};
@@ -69,6 +80,7 @@ window.PK = window.PK || {};
       skill: r.skill, desc: r.desc
     };
     if (r.ch) d.ch = r.ch;
+    if (r.drv) d.drv = r.drv;
     if (r.grip) d.gripCol = r.grip;
     return d;
   });
@@ -287,11 +299,61 @@ window.PK = window.PK || {};
   });
   const GLITCH_HEAD = glitchRows(DRV_HEAD, 5, { 3: 2, 4: 2, 9: -2, 10: -1 }).map((r, y) => (y === 6 ? r.replace(/[gGkmw]/g, 'c') : r));
   const GLITCH_BODY = glitchRows(DRV_BODY, 11, { 2: -2, 5: 1 });
+  // chef: W tall hat, w hat shade, b band, R hair, r hair shade, k/K/e skin, s red scarf, C coat, c coat shade
+  const CHEF_HEAD = [
+    sym('', 'wWWWWWWw'), sym('', 'wWWWWWWWWWWw'), sym('', 'WWWWWWWWWWWWWW'), sym('', 'WWWWWWWWWWWWWW'),
+    sym('', 'wWWWWWWWWWWWWw'), sym('', 'bbbbbbbbbbbbbbbb'), sym('', 'RRRRRRRRRRRRRRRR'), sym('', 'kRRRRRRRRRRRRRRRRk'),
+    sym('', 'eRRRRRRRRRRRRRRRRe'), sym('', 'RRRRRRRRRRRRRRRR'), sym('', 'rRRRRRRRRRRRRr'), sym('', 'rrRRRRRRRRrr'),
+    sym('', 'kkkkkkkkkk'), sym('', 'KKKKKKKK')
+  ];
+  const CHEF_BODY = [
+    sym('', 'CCCCssssssssssCCCC'), sym('', 'C'.repeat(22)), sym('', 'c' + 'C'.repeat(22) + 'c'), sym('', 'c' + 'C'.repeat(24) + 'c').slice(0, 26),
+    sym('', 'c' + 'C'.repeat(22) + 'c'), sym('', 'cc' + 'C'.repeat(20) + 'cc'), sym('', 'cc' + 'C'.repeat(20) + 'cc'), sym('', 'ccc' + 'C'.repeat(18) + 'ccc')
+  ];
+  // robot: M metal, m shade, L light panel, A antenna light, a stalk, b bolt, g joint, r/G status lights
+  const ROBOT_HEAD = [
+    sym('', 'AA'), sym('', 'a'), sym('', 'a'), sym('', 'MMMMMMMMMMMMMM'), sym('', 'MmmmmmmmmmmmmmmM'),
+    sym('', 'MmMMMMMMMMMMMMmM'), sym('', 'bMmMMMMMMMMMMMMmMb'), sym('', 'bMmMMMMMMMMMMMMmMb'), sym('', 'MmMMMMMMMMMMMMmM'),
+    sym('', 'MmmmmmmmmmmmmmmM'), sym('', 'MMMMMMMMMMMMMMMM'), sym('', 'gggggggg'), sym('', 'gggggg'), sym('', 'gggggggg')
+  ];
+  const ROBOT_BODY = [
+    sym('', 'M'.repeat(20)), sym('', 'M'.repeat(22)), sym('', 'MMm' + 'L'.repeat(16) + 'mMM'), sym('', 'MMmLLLLLrrLLGGLLLLLmMM'),
+    sym('', 'MMm' + 'L'.repeat(16) + 'mMM'), sym('', 'MMmmmmmmmmmmmmmmmmmmMM'), sym('', 'm' + 'M'.repeat(22) + 'm'), sym('', 'm' + 'M'.repeat(22) + 'm')
+  ];
+  // cat: O fur, o stripe, W white fur, P pink inner ear
+  const CAT_HEAD = [
+    sym('', 'oO..........Oo'), sym('', 'oPO........OPo'), sym('', 'oOPO......OPOo'), sym('', 'O'.repeat(16)), sym('', 'O'.repeat(18)),
+    sym('', 'OOooOOOOOOOOOOooOO'), sym('', 'O'.repeat(18)), sym('', 'OOOOooOOOOOOooOOOO'), sym('', 'O'.repeat(18)),
+    sym('', 'OOOooOOOOOOooOOO'), sym('', 'O'.repeat(14)), sym('', 'O'.repeat(12)), sym('', 'W'.repeat(10)), sym('', 'W'.repeat(8))
+  ];
+  const CAT_BODY = [
+    sym('', 'O'.repeat(20)), sym('', 'O'.repeat(22)), sym('', 'OOooOOOOOOOOOOOOOOooOO'), sym('', 'O'.repeat(24)),
+    sym('', 'OOOOOooOOOOOOOOooOOOOO'), sym('', 'o' + 'O'.repeat(22) + 'o'), sym('', 'OOooOOOOOOOOOOOOOOooOO'), sym('', 'o' + 'O'.repeat(22) + 'o')
+  ];
+  // ninja: N black hood, n shade, B red headband (tails hang on the right), g belt
+  const NINJA_HEAD = (() => {
+    const rows = [sym('', 'N'.repeat(8)), sym('', 'N'.repeat(12)), sym('', 'N'.repeat(14)), sym('', 'N'.repeat(16)), sym('', 'B'.repeat(16)),
+      sym('', 'B'.repeat(16)), sym('', 'N'.repeat(16)), sym('', 'N'.repeat(18)), sym('', 'N'.repeat(18)), sym('', 'N'.repeat(16)),
+      sym('', 'N'.repeat(14)), sym('', 'N'.repeat(12)), sym('', 'n'.repeat(10)), sym('', 'n'.repeat(8))];
+    const put = (y, x, t) => { rows[y] = rows[y].slice(0, x) + t + rows[y].slice(x + t.length); };
+    put(5, 21, 'BB'); put(6, 21, 'BBB'); put(7, 22, 'BB'); put(8, 22, 'B'); put(9, 23, 'B');   // headband tails
+    return rows;
+  })();
+  const NINJA_BODY = [
+    sym('', 'N'.repeat(20)), sym('', 'N'.repeat(22)), sym('', 'n' + 'N'.repeat(22) + 'n'), sym('', 'n' + 'N'.repeat(22) + 'n'),
+    sym('', 'n' + 'N'.repeat(22) + 'n'), sym('', 'g'.repeat(24)), sym('', 'n' + 'N'.repeat(22) + 'n'), sym('', 'nn' + 'N'.repeat(20) + 'nn')
+  ];
   const CHARS = {
     glitch: { head: GLITCH_HEAD, body: GLITCH_BODY, split: true,
       pal: { g: '#10c070', G: '#60ffb0', k: '#081010', m: '#ff30c0', c: '#30e8ff', w: '#f0fff8' } },
     vamp: { head: VAMP_HEAD, body: VAMP_BODY,
       pal: { H: '#16121e', h: '#3e3850', e: '#ece4f2', E: '#b8acc8', k: '#d8d0e4', C: '#1c0e16', P: '#2e1424', c: '#c0182e' } },
+    chef: { head: CHEF_HEAD, body: CHEF_BODY,
+      pal: { W: '#fafafa', w: '#d8d8e0', b: '#c8c8d0', R: '#6a4428', r: '#4a2e18', k: '#f1c9a0', K: '#d8ad86', e: '#d09a78', s: '#d8382f', C: '#f4f4f4', c: '#c8c8d4' } },
+    robot: { head: ROBOT_HEAD, body: ROBOT_BODY,
+      pal: { M: '#a8b0bc', m: '#7a8290', L: '#c8d0dc', A: '#ff4040', a: '#5a6270', b: '#ffd040', g: '#3a4250', r: '#ff4040', G: '#40e070' } },
+    cat: { head: CAT_HEAD, body: CAT_BODY, pal: { O: '#f09a3a', o: '#c86a1a', W: '#fff4e0', P: '#ffb0c0' } },
+    ninja: { head: NINJA_HEAD, body: NINJA_BODY, pal: { N: '#1c1c24', n: '#2e2e3a', B: '#d8382f', g: '#5a5a66' } },
     ghost: { head: GHOST_HEAD, body: GHOST_BODY,
       pal: { o: 'rgba(150,178,236,0.9)', W: 'rgba(246,249,255,0.86)', w: 'rgba(200,214,244,0.82)', g: 'rgba(214,236,255,0.6)' } }
   };
@@ -303,6 +365,7 @@ window.PK = window.PK || {};
   const SPR_PHASE = []; // SPR_PHASE[defIndex] = faded [l, c, r] for karts with the 'phase' skill (else undefined)
   // drivers: [hair, shirt, skin]. ME matches PAL_ME in intro.js.
   const ME = ['#3b2a20', '#7d8592', '#f1c9a0', 'hero'];
+  const drvOf = (d) => d.drv || (d.ch ? SHOPPERS[d.id % SHOPPERS.length] : ME);
   // shoppers: [hair, shirt, skin, hairstyle, cap colour]
   const SHOPPERS = [['#1c1c22', '#c8504a', '#f1c9a0', 'pony'], ['#7a5232', '#3a8a5a', '#d9a878', 'cap', '#e0e0e8'], ['#d8b860', '#4a6ab8', '#f6d6b8', 'bun'],
     ['#8a8a90', '#b85a9a', '#e9bf95', 'cap', '#3a5aa8'], ['#2a1a10', '#e0a030', '#b07a52', ''], ['#5a3420', '#5a5a66', '#e2b48a', 'pony']];
@@ -548,10 +611,12 @@ window.PK = window.PK || {};
 
   // head outline per driver type: EXT[key][row] = [x0, x1] (head-local columns) or null
   const HEAD_RE = { hero: /[RrhkKe]/, vamp: /[HhEe]/, ghost: /[oWw]/ };
+  const ANY = /[^.]/;
   const EXT = {};
   function headExt(key) {
     if (EXT[key]) return EXT[key];
-    const rows = key === 'vamp' ? VAMP_HEAD : key === 'ghost' ? GHOST_HEAD : HERO_HEAD, re = HEAD_RE[key] || HEAD_RE.hero;
+    const C2 = CHARS[key], ST = STYLES[key];
+    const rows = C2 ? C2.head : ST ? ST[0] : key === 'plain' ? DRV_HEAD : HERO_HEAD, re = HEAD_RE[key] || (C2 || ST || key === 'plain' ? ANY : HEAD_RE.hero);
     return (EXT[key] = rows.map((r) => {
       let a = -1, b = -1;
       for (let x = 0; x < r.length; x++) if (re.test(r[x])) { if (a < 0) a = x; b = x; }
@@ -623,7 +688,7 @@ window.PK = window.PK || {};
   }
   function drawHat(g, j, id) {
     if (!j.drv || id === 'none') return;
-    const key = j.d.ch === 'vamp' || j.d.ch === 'ghost' ? j.d.ch : 'hero';
+    const key = j.d.ch && CHARS[j.d.ch] ? j.d.ch : j.drv && j.drv[3] ? j.drv[3] : 'plain';
     const px = hatPix(id, headExt(key), j.dx > 0 ? -1 : 1, j.d);
     const x0 = DRV_X + j.dx * 4;
     const C = j.d.ch && CHARS[j.d.ch];
@@ -761,14 +826,14 @@ window.PK = window.PK || {};
         }
         return { fr, fd };
       };
-      const shop = SHOPPERS[d.id % SHOPPERS.length];
+      const shop = drvOf(d);
       const ai = build(shop, 'cart');
       SPR.push(ai.fr);
       SPR_PHASE[d.id] = ai.fd;
       // player frames get their own canvases (repainted in place by setPlayerBody); character
       // karts (d.ch) show the same driver for AI and player
       const mj = [];
-      const me = build(d.ch ? shop : ME, playerBody, mj);
+      const me = build(shop, playerBody, mj);
       ME_JOBS.push(mj);
       SPR_ME.push(me.fr);
       SPR_PHASE_ME[d.id] = me.fd;
@@ -811,7 +876,7 @@ window.PK = window.PK || {};
     const item = decoOk(kind, id), key = kind + '|' + item + '|' + defIndex + '|' + playerBody;
     if (DECO_CACHE[key]) return DECO_CACHE[key];
     const deco = Object.assign({}, NO_DECO); deco[kind] = item;
-    const j = { cv: mkCv(), d, drv: d.ch ? SHOPPERS[d.id % SHOPPERS.length] : ME, dx: 0, body: playerBody, deco };
+    const j = { cv: mkCv(), d, drv: drvOf(d), dx: 0, body: playerBody, deco };
     JOBS.push(j); paint(j);   // repaints when cart.png arrives
     return (DECO_CACHE[key] = j.cv);
   }
@@ -821,7 +886,7 @@ window.PK = window.PK || {};
     if (!d || !PK.U || typeof document === 'undefined') return null;
     const body = bodyOk(bodyId), key = body + '|' + defIndex + (empty ? '|e' : '');
     if (BODY_CACHE[key]) return BODY_CACHE[key];
-    const drv = empty ? null : d.ch ? SHOPPERS[d.id % SHOPPERS.length] : ME;
+    const drv = empty ? null : drvOf(d);
     const j = { cv: mkCv(), d, drv, dx: 0, body };
     JOBS.push(j); paint(j);   // in JOBS so the cart body repaints when cart.png arrives
     return (BODY_CACHE[key] = j.cv);
@@ -1631,6 +1696,99 @@ window.PK = window.PK || {};
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // portraits: a front view (head + shoulders, 32x32) per character for the shop and the kart select
+  // ---------------------------------------------------------------------------
+  const PORT_CACHE = {};
+  function portrait(defIndex) {
+    const d = DEFS[defIndex];
+    if (!d || typeof document === 'undefined') return null;
+    if (PORT_CACHE[defIndex]) return PORT_CACHE[defIndex];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const g = cv.getContext('2d'), R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+    const U = PK.U, dk = (c, f) => (U && U.darken ? U.darken(c, f) : c);
+    const face = (skin, shirt, collar) => {
+      R(shirt, 5, 25, 22, 7); R(dk(shirt, 0.8), 5, 25, 2, 7); R(dk(shirt, 0.8), 25, 25, 2, 7);   // shoulders
+      if (collar) R(collar, 12, 25, 8, 2);
+      R(dk(skin, 0.86), 13, 21, 6, 4);                                                       // neck
+      R(skin, 9, 7, 14, 15); R(skin, 8, 9, 16, 11); R(dk(skin, 0.9), 9, 20, 14, 2);            // head
+    };
+    const eyes = (col, y) => { R(col || '#1a1420', 12, y || 13, 2, 3); R(col || '#1a1420', 18, y || 13, 2, 3); R('#ffffff', 12, y || 13, 1, 1); R('#ffffff', 18, y || 13, 1, 1); };
+    const mouth = (c) => { R(c || '#b0503e', 14, 18, 4, 1); };
+    const blush = () => { R('rgba(255,120,140,0.45)', 10, 16, 2, 1); R('rgba(255,120,140,0.45)', 20, 16, 2, 1); };
+    const ch = d.ch, v = d.drv || ME;
+    if (ch === 'vamp') {
+      R('#1c0e16', 3, 22, 26, 10); R('#c0182e', 9, 23, 14, 9); R('#2e1424', 3, 20, 6, 6); R('#2e1424', 23, 20, 6, 6);
+      face('#e8e0f0', '#1c0e16', '#c0182e');
+      R('#16121e', 8, 5, 16, 4); R('#16121e', 8, 9, 2, 6); R('#16121e', 22, 9, 2, 6); R('#16121e', 15, 9, 2, 2);   // slick hair + widow's peak
+      eyes('#e02040'); R('#7a1020', 14, 18, 4, 1); R('#ffffff', 14, 19, 1, 1); R('#ffffff', 17, 19, 1, 1);         // fangs
+    } else if (ch === 'ghost') {
+      R('#dce6ff', 7, 4, 18, 24); R('#dce6ff', 5, 9, 22, 19); R('#f6f9ff', 9, 5, 14, 20);
+      for (let x = 5; x < 27; x += 4) R('rgba(0,0,0,0)', x, 28, 2, 4);
+      R('#2a2a40', 11, 12, 3, 5); R('#2a2a40', 18, 12, 3, 5); R('#2a2a40', 14, 20, 4, 2);
+    } else if (ch === 'glitch') {
+      face('#60ffb0', '#10c070', '#ff30c0');
+      R('#081010', 8, 5, 16, 5); eyes('#ff30c0');
+      R('rgba(255,48,192,0.6)', 6, 11, 20, 2); R('rgba(48,232,255,0.6)', 9, 17, 18, 1); R('#081010', 4, 23, 7, 1);
+    } else if (ch === 'chef') {
+      face('#f1c9a0', '#f4f4f4', '#d8382f');
+      R('#fafafa', 9, 0, 14, 7); R('#fafafa', 7, 2, 18, 4); R('#d8d8e0', 9, 7, 14, 2);                            // tall hat + band
+      R('#6a4428', 8, 9, 2, 4); R('#6a4428', 22, 9, 2, 4);
+      eyes(); mouth(); blush(); R('#4a2e18', 13, 17, 6, 1);                                                        // moustache
+    } else if (ch === 'robot') {
+      R('#7a8290', 6, 25, 20, 7); R('#c8d0dc', 10, 27, 12, 4); R('#ff4040', 12, 28, 2, 2); R('#40e070', 18, 28, 2, 2);
+      R('#3a4250', 13, 22, 6, 3);
+      R('#a8b0bc', 6, 5, 20, 17); R('#7a8290', 6, 20, 20, 2); R('#ffd040', 6, 7, 2, 2); R('#ffd040', 24, 7, 2, 2);
+      R('#1a2030', 8, 11, 16, 6); R('#30e8ff', 10, 13, 4, 2); R('#30e8ff', 18, 13, 4, 2);                          // visor eyes
+      R('#5a6270', 15, 1, 2, 4); R('#ff4040', 14, 0, 4, 2); R('#3a4250', 12, 19, 8, 1);
+    } else if (ch === 'cat') {
+      R('#f09a3a', 6, 25, 20, 7); R('#fff4e0', 12, 25, 8, 7);
+      R('#f09a3a', 7, 6, 18, 17); R('#f09a3a', 6, 9, 20, 11);
+      R('#f09a3a', 6, 1, 5, 7); R('#f09a3a', 21, 1, 5, 7); R('#ffb0c0', 8, 3, 2, 4); R('#ffb0c0', 22, 3, 2, 4);     // ears
+      R('#c86a1a', 14, 6, 4, 1); R('#c86a1a', 13, 8, 6, 1); R('#fff4e0', 11, 16, 10, 6);                           // stripes, muzzle
+      R('#3a9a40', 10, 12, 4, 3); R('#3a9a40', 18, 12, 4, 3); R('#101010', 11, 12, 1, 3); R('#101010', 19, 12, 1, 3);
+      R('#ff7a9a', 15, 16, 2, 2); R('#5a3020', 14, 19, 4, 1);
+      R('#ffffff', 3, 17, 6, 1); R('#ffffff', 23, 17, 6, 1); R('#ffffff', 4, 19, 5, 1); R('#ffffff', 23, 19, 5, 1);
+    } else if (ch === 'ninja') {
+      R('#1c1c24', 5, 25, 22, 7); R('#5a5a66', 5, 30, 22, 2);
+      R('#1c1c24', 7, 4, 18, 20); R('#1c1c24', 6, 7, 20, 14); R('#2e2e3a', 13, 21, 6, 4);
+      R('#f1c9a0', 9, 11, 14, 5); eyes('#101018', 12);                                                              // eye slit
+      R('#d8382f', 6, 7, 20, 3); R('#d8382f', 25, 9, 3, 2); R('#d8382f', 26, 11, 3, 2); R('#d8382f', 27, 13, 2, 2);  // headband
+    } else {
+      // everyday people: hair style + colours from drv = [hair, shirt, skin, style, cap]
+      const hair = v[0], shirt = v[1], skin = v[2] || '#f1c9a0', st = v[3] || '', cap = v[4] || dk(shirt, 0.7);
+      if (st === 'pony') { R(hair, 6, 8, 3, 15); R(hair, 23, 8, 3, 15); }                                      // long sides
+      face(skin, shirt, dk(shirt, 0.8));
+      if (st === 'cap') {
+        R(cap, 8, 3, 16, 6); R(dk(cap, 0.8), 8, 8, 16, 2); R(dk(cap, 0.7), 18, 9, 9, 2);                        // cap + brim
+        R(hair, 8, 10, 2, 4); R(hair, 22, 10, 2, 4);
+      } else {
+        R(hair, 8, 4, 16, 5); R(hair, 7, 6, 18, 4); R(hair, 7, 9, 3, 4); R(hair, 22, 9, 3, 4);
+        R(hair, 11, 9, 4, 2); R(hair, 18, 9, 3, 1);                                                              // fringe
+        R(U && U.darken ? dk(hair, 1.25) : hair, 10, 5, 5, 1);                                                    // shine
+        if (st === 'bun') { R(hair, 12, 0, 8, 5); R(dk(hair, 0.8), 13, 4, 6, 1); }
+      }
+      eyes(); mouth(); blush();
+      if (d.name === 'GRAN') { R('#4a3a5a', 10, 12, 5, 1); R('#4a3a5a', 17, 12, 5, 1); R('#4a3a5a', 10, 16, 5, 1); R('#4a3a5a', 17, 16, 5, 1); R('#4a3a5a', 10, 12, 1, 5); R('#4a3a5a', 14, 12, 1, 5); R('#4a3a5a', 17, 12, 1, 5); R('#4a3a5a', 21, 12, 1, 5); R('#4a3a5a', 15, 13, 2, 1); for (let x = 11; x < 21; x += 2) R('#ffffff', x, 26, 1, 1); }   // glasses + pearls
+      if (d.name === 'BLK') { R('#101014', 10, 12, 12, 3); R('#101014', 15, 12, 2, 1); R('#ffffff', 14, 26, 4, 3); R('#d8382f', 15, 27, 2, 4); }   // shades, shirt + tie
+    }
+    return (PORT_CACHE[defIndex] = cv);
+  }
+  // a single big wheel for the shop card (tyre, rim, hub in the wheel's colours + its effect)
+  function wheelIcon(id) {
+    const P = WHEEL_PAL[id];
+    if (!P || typeof document === 'undefined') return null;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 24;
+    const g = cv.getContext('2d'), R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+    const disc = (r, c) => { for (let y = -r; y <= r; y++) { const w = Math.round(Math.sqrt(r * r - y * y)); R(c, 12 - w, 12 + y, w * 2, 1); } };
+    if (id === 'fire') { R('#ff5a20', 4, 1, 3, 4); R('#ffd848', 9, 0, 3, 4); R('#ff8a20', 15, 1, 3, 4); R('#ff5a20', 19, 3, 2, 3); }
+    if (id === 'neon') disc(12, 'rgba(80,240,255,0.35)');
+    if (id === 'ice') { R('#ffffff', 2, 3, 1, 3); R('#ffffff', 1, 4, 3, 1); R('#ffffff', 21, 18, 1, 3); R('#ffffff', 20, 19, 3, 1); }
+    disc(10, '#141018'); disc(9, P.tyre); disc(7, P.tyreL); disc(5, P.hubD); disc(3, P.hub);
+    for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; R(P.hubD, Math.round(12 + Math.cos(a) * 5), Math.round(12 + Math.sin(a) * 5), 1, 1); }
+    if (id === 'gold') { R('#ffffff', 8, 7, 2, 1); R('#ffffff', 7, 8, 1, 2); }
+    return cv;
+  }
   PK.Karts = { DEFS, ROSTER, init, create, update, collide, aiInput, hit, drawFx, frame, sprite, emptySprite,
-    BODIES, setPlayerBody, bodySprite, playerBody, DECOS, setPlayerDeco, decoSprite, playerDeco: Object.assign({}, NO_DECO) };
+    BODIES, setPlayerBody, bodySprite, playerBody, DECOS, setPlayerDeco, decoSprite, portrait, wheelIcon, playerDeco: Object.assign({}, NO_DECO) };
 })(window.PK);
