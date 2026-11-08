@@ -1004,6 +1004,17 @@ window.PK = window.PK || {};
     return g.sprite();
   }
   // Dead-end board (16x20): red "X" plate on a post
+  // maze exit: two hedge posts with a green 'EXIT 출구' banner between them (the middle stays open)
+  function makeExitGate() {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 40;
+    const g = cv.getContext('2d'), R = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+    for (const x of [0, 56]) { R('#1f4a20', x, 6, 8, 34); R('#3f8a3a', x + 1, 6, 6, 33); R('#6ab85a', x + 2, 7, 2, 30); }
+    R('#0c2a10', 4, 2, 56, 14); R('#2fa84a', 5, 3, 54, 12); R('#7af08a', 5, 3, 54, 1);
+    g.fillStyle = '#ffffff'; g.font = 'bold 9px monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('EXIT \u2192', 32, 9.5);
+    R('#ffe14d', 26, 16, 12, 3);
+    return cv;
+  }
   function makeDeadEnd() {
     const g = Grid(16, 20);
     g.rect(0, 0, 16, 11, 'R'); g.rect(1, 1, 14, 9, 'r'); g.rect(2, 2, 12, 7, 'w');
@@ -1993,7 +2004,7 @@ window.PK = window.PK || {};
     const T = c.T, L = c.lib, rnd = c.rnd, pick = c.pick, N = T.N, P = T.PTS, TAN = T.TAN, B = c.B, ad = PK.U.angDiff;
     // 1) dead-end side alcoves: a gravel spur off a straight into a big hedge block (visual only:
     //    the invisible wall still closes the mouth, where the box-hedge border runs across it)
-    const SL = 62, spurs = T._spurs = [];
+    const SL = 96, spurs = T._spurs = [];
     for (let i = 30; i < N - 30 && spurs.length < 7; i += 5) {
       if (T._bend(i) > 0.03 || T._bend((i + 9) % N) > 0.06 || T._bend((i - 9 + N) % N) > 0.06) continue;
       if (spurs.some((s) => Math.min(Math.abs(s.i - i), N - Math.abs(s.i - i)) < 60)) continue;
@@ -2026,8 +2037,15 @@ window.PK = window.PK || {};
       let p = at(B + s.L - 8, 0); c.tryAdd(p[0], p[1], f[0], f[1], true);
       p = at(B + s.L + 18, 0); c.tryAdd(p[0], p[1], 'hedge', pick(L.hedge), true);                 // the hedge that closes it
       for (const pp of [-16, 16]) { p = at(B + s.L + 12, pp); c.tryAdd(p[0], p[1], 'hedge', pick(L.hedge), true); }
-      p = at(B + 10, 13); c.tryAdd(p[0], p[1], 'deadend', L.deadend, true);                        // "X" board at the mouth
     });
+    // 1b) 🚪 escape: the EXIT gate on the bottom row (after the last corner) and a hedge wall across
+    //     the road between it and the start grid, so the only way out is the whole maze
+    {
+      const ex = T.nearestAll(240, 910), bl = T.nearestAll(372, 910);
+      T.exitIdx = ex.i;
+      c.tryAdd(P[ex.i][0], P[ex.i][1], 'exit', makeExitGate(), true, 1);
+      T._blockers = [-14, 0, 14].map((lat) => { const t = TAN[bl.i]; return { x: P[bl.i][0] - Math.sin(t) * lat, y: P[bl.i][1] + Math.cos(t) * lat, i: bl.i, lat, spr: pick(L.hedge) }; });
+    }
     // 2) chevron signs on the outside of blind corners that follow a long run-up
     let last = -99;
     for (let i = 0; i < N; i++) {
@@ -2087,6 +2105,13 @@ window.PK = window.PK || {};
   }
   // gravel grain + raked stripes on the maze path
   function road6(g, T) {
+    const B0 = T.BARRIER, RW = T.ROAD_W;
+    for (const s of T._spurs || []) {   // the corridors' mouths cut through the border
+      const a = [s.x0 + s.nx * (RW / 2 - 6), s.y0 + s.ny * (RW / 2 - 6)], e = [s.x0 + s.nx * (B0 + 6), s.y0 + s.ny * (B0 + 6)];
+      for (const [w, col] of [[30, '#3e2e20'], [27, '#cfc6b0'], [23, '#b4a080']]) {
+        g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'butt'; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(e[0], e[1]); g.stroke();
+      }
+    }
     const P = T.PTS, TAN = T.TAN, N = T.N, rnd = PK.U.rng(6161), half = T.ROAD_W / 2 - 3;
     for (let i = 0; i < N; i++) {
       const t = TAN[i], sx = -Math.sin(t), sy = Math.cos(t);
@@ -2201,8 +2226,8 @@ window.PK = window.PK || {};
       grip: 1, theme: 1, fx: 'glitch', seed: 777005, mini: { bg: 'rgba(20,0,30,0.5)', edge: '#ff2ad0', road: '#00e8ff' }, props: props5, decor: decor5, overRoad: road5
     },
     {
-      id: 6, name: 'HEDGE MAZE', nameKo: '미로 정원', secret: false, noMinimap: true,
-      desc: '키 큰 생울타리 미로 · 직각 코너와 지그재그, 막다른 길 조심! (미니맵 없음)',
+      id: 6, name: 'HEDGE MAZE', nameKo: '미로 정원', secret: false, noMinimap: true, escape: true,
+      desc: '출구(EXIT)를 찾아 탈출! 갈림길은 대부분 막다른 길 · 미니맵 없음',
       ctrl: mazeCtrl(MAZE_NODES, 34),
       roadW: 40, barrier: 34,
       tile: tileLawn, fog: '#d4ecd0', bg: () => bgGarden('#d4ecd0'), road: ROAD_GARDEN, puddle: MUD, skid: 'rgba(90,70,50,0.22)', stencil: ['MAZE'],
@@ -2273,6 +2298,7 @@ window.PK = window.PK || {};
       this.N = e.N; this.PTS = e.PTS; this.TAN = e.TAN; this.length = e.length;
       this.ROAD_W = e.ROAD_W; this.OFFROAD_D = e.ROAD_W / 2 + 5; this.BARRIER = e.BARRIER;
       this.pads = e.pads; this.puddles = e.puddles; this.ice = e.ice; this.props = e.props; this.obstacles = e.obstacles;
+      this._spurs = e.spurs || []; this.exitIdx = e.exitIdx || 0; this._walk = e.walk || null;
       this.grip = def.grip; this.fx = def.fx;
       this.mini = e.mini; this._miniS = e.miniS; this._miniOX = e.miniOX; this._miniOY = e.miniOY;
       this._w1 = { bg: e.bg, tex: e.tex, tile: e.tile, fog: e.fog };
@@ -2285,6 +2311,7 @@ window.PK = window.PK || {};
 
     _build(def) {
       const U = PK.U;
+      this._spurs = []; this._blockers = []; this.exitIdx = 0;
       const cl = buildCenterline(def.ctrl);
       this.N = cl.N; this.PTS = cl.PTS; this.TAN = cl.TAN; this.length = cl.length;
       this.ROAD_W = def.roadW || 44; this.OFFROAD_D = this.ROAD_W / 2 + 5; this.BARRIER = def.barrier || 40;
@@ -2299,11 +2326,47 @@ window.PK = window.PK || {};
       return {
         N: cl.N, PTS: cl.PTS, TAN: cl.TAN, length: cl.length, ROAD_W: this.ROAD_W, BARRIER: this.BARRIER,
         pads: this.pads, puddles: this.puddles, ice: this.ice, props: this.props, obstacles: this.obstacles,
-        tex, bg, tile: TILE, fog, mini: m.cv, miniS: m.s, miniOX: m.ox, miniOY: m.oy, night: null
+        tex, bg, tile: TILE, fog, mini: m.cv, miniS: m.s, miniOX: m.ox, miniOY: m.oy, night: null,
+        spurs: this._spurs, exitIdx: this.exitIdx, walk: def.escape ? this._buildWalk() : null
       };
     },
 
     // ---- queries -----------------------------------------------------------------------
+    // maze: a coarse 4-unit grid of the walkable paths (route + side corridors), for line-of-sight
+    _buildWalk() {
+      const G = 256, grid = new Uint8Array(G * G), P = this.PTS, TAN = this.TAN, B = this.BARRIER + 2;
+      const mark = (x, y) => { const cx = (x / 4) | 0, cy = (y / 4) | 0; if (cx >= 0 && cy >= 0 && cx < G && cy < G) grid[cy * G + cx] = 1; };
+      for (let i = 0; i < this.N; i++) {   // fill between centre-line points too (they are 6 units apart)
+        const j = (i + 1) % this.N;
+        for (let u = 0; u < 1; u += 0.25) {
+          const x = P[i][0] + (P[j][0] - P[i][0]) * u, y = P[i][1] + (P[j][1] - P[i][1]) * u, t = TAN[i];
+          for (let l = -B; l <= B; l += 2) mark(x - Math.sin(t) * l, y + Math.cos(t) * l);
+        }
+      }
+      for (const s of this._spurs || []) for (let al = this.BARRIER - 4; al < this.BARRIER + s.L; al += 2) for (let pp = -12; pp <= 12; pp += 2) mark(s.x0 + s.nx * al + s.tx * pp, s.y0 + s.ny * al + s.ty * pp);
+      return grid;
+    },
+    // can you see from (x0,y0) to (x1,y1) without a hedge in between? (maze only; true elsewhere)
+    seeThrough(x0, y0, x1, y1) {
+      const g = this._walk;
+      if (!g) return true;
+      const dx = x1 - x0, dy = y1 - y0, d = Math.hypot(dx, dy), n = Math.floor(d / 4);
+      for (let k = 2; k < n - 2; k++) {   // skip both ends (the object may stand right by a hedge)
+        const x = x0 + dx * k / n, y = y0 + dy * k / n, cx = (x / 4) | 0, cy = (y / 4) | 0;
+        if (cx < 0 || cy < 0 || cx >= 256 || cy >= 256 || !g[cy * 256 + cx]) return false;
+      }
+      return true;
+    },
+    // maze side corridor at (x, y)? -> { s, al (out from the centre line), pp (across) } or null
+    spurAt(x, y) {
+      const sp = this._spurs, B = this.BARRIER;
+      if (!sp || !sp.length) return null;
+      for (const s of sp) {
+        const dx = x - s.x0, dy = y - s.y0, al = dx * s.nx + dy * s.ny, pp = dx * s.tx + dy * s.ty;
+        if (al > B - 4 && al < B + s.L + 8 && Math.abs(pp) < 18) return { s, al, pp };
+      }
+      return null;
+    },
     // Nearest centerline index among i0-win..i0+win (wrapping). lat = signed offset along the
     // right vector (-sin t, cos t) of TAN[i]; d = |lat| (perpendicular distance to centerline).
     nearestLocal(i0, x, y, win) {
@@ -2509,7 +2572,7 @@ window.PK = window.PK || {};
         wet: 6, plant: 10, water: 14, bin: 6, corral: 28, snowman: 9, icecream: 28, flowers: 22, sacks: 16, cstack: 13, bunting: 30,
         vending: 13, gate: 26, ptree: 12,
         errwin: 26, e404: 28, shard: 18, cube: 14, missing: 13, cursor: 10, loadbar: 22, bars: 20,
-        hedge: 26, topiary: 12, fountain: 26, bench: 16, gnome: 7, hay: 13, mower: 11, arrow: 13, deadend: 11,
+        hedge: 26, topiary: 12, fountain: 26, bench: 16, gnome: 7, hay: 13, mower: 11, arrow: 13, deadend: 11, exit: 50,
         tcart: 17, ftrolley: 13, melon: 10, cones: 15, baskets: 10, balloons: 10, parasol: 22, bollard: 4, charger: 8
       };
       const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
@@ -2545,6 +2608,10 @@ window.PK = window.PK || {};
     _placeObstacles(def) {
       const N = this.N, P = this.PTS, TAN = this.TAN, half = this.ROAD_W / 2;
       const obs = this.obstacles = [];
+      for (const b of this._blockers || []) {   // maze: the hedge across the road behind the start
+        const o = { x: b.x, y: b.y, r: 9, spr: b.spr, w: 26, kind: 'hedge', obstacle: true, i: b.i, lat: b.lat, lo: b.lat, hi: b.lat, vx: 0, vy: 0, mv: null };
+        obs.push(o); this.props.push(o);
+      }
       if (!OBSTACLES_ON) return;   // 장애물 없음: no solid obstacles on any map (racing only)
       const spec = OBSTACLES[def.id];
       if (!spec) return;

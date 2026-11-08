@@ -54,17 +54,9 @@ window.PK = window.PK || {};
     // secret: won by finishing 1st on the glitch map
     { name: 'GLITCH', nameKo: '글리치', color: '#00e8b8', weight: 3, skill: 'teleport', ch: 'glitch', grip: '#ff40d0',
       tune: { maxV: 4, acc: 8, turn: 0.08 }, desc: '버그로 태어난 카트. 모든 능력이 평균 이상, 가끔 화면이 깨진다' },
-    // shop characters (9..13)
-    { name: 'CHEF', nameKo: '요리사', color: '#e8e8ee', weight: 3, skill: 'watermelon', ch: 'chef', grip: '#d8382f',
-      desc: '푸드코트 요리사. 수박을 휙휙 던진다' },
+    // shop character (9)
     { name: 'GRAN', nameKo: '할머니', color: '#8a5ac8', weight: 4, skill: 'magnet', drv: ['#d0d0d4', '#7a4aa8', '#efc7a4', 'bun'], grip: '#f0e0ff',
-      tune: { grip: 0.3 }, desc: '할인 자석으로 앞 카트를 끌어당기는 장보기 고수' },
-    { name: 'ROBO', nameKo: '로봇', color: '#7a8290', weight: 5, skill: 'cart_rush', ch: 'robot', grip: '#ff4040',
-      tune: { acc: 6 }, desc: '강철 몸으로 들이받는 재고 정리 로봇' },
-    { name: 'CAT', nameKo: '고양이', color: '#f09a3a', weight: 1, skill: 'banana', ch: 'cat', grip: '#fff0d8',
-      tune: { turn: 0.06 }, desc: '가볍고 날렵한 마트 고양이. 바나나를 흘리고 다닌다' },
-    { name: 'NINJA', nameKo: '닌자', color: '#3a3a48', weight: 2, skill: 'phase', ch: 'ninja', grip: '#d8382f',
-      tune: { acc: 6 }, desc: '순식간에 사라졌다 나타나는 그림자 닌자' }
+      tune: { grip: 0.3 }, desc: '할인 자석으로 앞 카트를 끌어당기는 장보기 고수' }
   ];
   const DEFS = RAW.map((r, i) => {
     const w = r.weight, t = r.tune || {};
@@ -299,61 +291,11 @@ window.PK = window.PK || {};
   });
   const GLITCH_HEAD = glitchRows(DRV_HEAD, 5, { 3: 2, 4: 2, 9: -2, 10: -1 }).map((r, y) => (y === 6 ? r.replace(/[gGkmw]/g, 'c') : r));
   const GLITCH_BODY = glitchRows(DRV_BODY, 11, { 2: -2, 5: 1 });
-  // chef: W tall hat, w hat shade, b band, R hair, r hair shade, k/K/e skin, s red scarf, C coat, c coat shade
-  const CHEF_HEAD = [
-    sym('', 'wWWWWWWw'), sym('', 'wWWWWWWWWWWw'), sym('', 'WWWWWWWWWWWWWW'), sym('', 'WWWWWWWWWWWWWW'),
-    sym('', 'wWWWWWWWWWWWWw'), sym('', 'bbbbbbbbbbbbbbbb'), sym('', 'RRRRRRRRRRRRRRRR'), sym('', 'kRRRRRRRRRRRRRRRRk'),
-    sym('', 'eRRRRRRRRRRRRRRRRe'), sym('', 'RRRRRRRRRRRRRRRR'), sym('', 'rRRRRRRRRRRRRr'), sym('', 'rrRRRRRRRRrr'),
-    sym('', 'kkkkkkkkkk'), sym('', 'KKKKKKKK')
-  ];
-  const CHEF_BODY = [
-    sym('', 'CCCCssssssssssCCCC'), sym('', 'C'.repeat(22)), sym('', 'c' + 'C'.repeat(22) + 'c'), sym('', 'c' + 'C'.repeat(24) + 'c').slice(0, 26),
-    sym('', 'c' + 'C'.repeat(22) + 'c'), sym('', 'cc' + 'C'.repeat(20) + 'cc'), sym('', 'cc' + 'C'.repeat(20) + 'cc'), sym('', 'ccc' + 'C'.repeat(18) + 'ccc')
-  ];
-  // robot: M metal, m shade, L light panel, A antenna light, a stalk, b bolt, g joint, r/G status lights
-  const ROBOT_HEAD = [
-    sym('', 'AA'), sym('', 'a'), sym('', 'a'), sym('', 'MMMMMMMMMMMMMM'), sym('', 'MmmmmmmmmmmmmmmM'),
-    sym('', 'MmMMMMMMMMMMMMmM'), sym('', 'bMmMMMMMMMMMMMMmMb'), sym('', 'bMmMMMMMMMMMMMMmMb'), sym('', 'MmMMMMMMMMMMMMmM'),
-    sym('', 'MmmmmmmmmmmmmmmM'), sym('', 'MMMMMMMMMMMMMMMM'), sym('', 'gggggggg'), sym('', 'gggggg'), sym('', 'gggggggg')
-  ];
-  const ROBOT_BODY = [
-    sym('', 'M'.repeat(20)), sym('', 'M'.repeat(22)), sym('', 'MMm' + 'L'.repeat(16) + 'mMM'), sym('', 'MMmLLLLLrrLLGGLLLLLmMM'),
-    sym('', 'MMm' + 'L'.repeat(16) + 'mMM'), sym('', 'MMmmmmmmmmmmmmmmmmmmMM'), sym('', 'm' + 'M'.repeat(22) + 'm'), sym('', 'm' + 'M'.repeat(22) + 'm')
-  ];
-  // cat: O fur, o stripe, W white fur, P pink inner ear
-  const CAT_HEAD = [
-    sym('', 'oO..........Oo'), sym('', 'oPO........OPo'), sym('', 'oOPO......OPOo'), sym('', 'O'.repeat(16)), sym('', 'O'.repeat(18)),
-    sym('', 'OOooOOOOOOOOOOooOO'), sym('', 'O'.repeat(18)), sym('', 'OOOOooOOOOOOooOOOO'), sym('', 'O'.repeat(18)),
-    sym('', 'OOOooOOOOOOooOOO'), sym('', 'O'.repeat(14)), sym('', 'O'.repeat(12)), sym('', 'W'.repeat(10)), sym('', 'W'.repeat(8))
-  ];
-  const CAT_BODY = [
-    sym('', 'O'.repeat(20)), sym('', 'O'.repeat(22)), sym('', 'OOooOOOOOOOOOOOOOOooOO'), sym('', 'O'.repeat(24)),
-    sym('', 'OOOOOooOOOOOOOOooOOOOO'), sym('', 'o' + 'O'.repeat(22) + 'o'), sym('', 'OOooOOOOOOOOOOOOOOooOO'), sym('', 'o' + 'O'.repeat(22) + 'o')
-  ];
-  // ninja: N black hood, n shade, B red headband (tails hang on the right), g belt
-  const NINJA_HEAD = (() => {
-    const rows = [sym('', 'N'.repeat(8)), sym('', 'N'.repeat(12)), sym('', 'N'.repeat(14)), sym('', 'N'.repeat(16)), sym('', 'B'.repeat(16)),
-      sym('', 'B'.repeat(16)), sym('', 'N'.repeat(16)), sym('', 'N'.repeat(18)), sym('', 'N'.repeat(18)), sym('', 'N'.repeat(16)),
-      sym('', 'N'.repeat(14)), sym('', 'N'.repeat(12)), sym('', 'n'.repeat(10)), sym('', 'n'.repeat(8))];
-    const put = (y, x, t) => { rows[y] = rows[y].slice(0, x) + t + rows[y].slice(x + t.length); };
-    put(5, 21, 'BB'); put(6, 21, 'BBB'); put(7, 22, 'BB'); put(8, 22, 'B'); put(9, 23, 'B');   // headband tails
-    return rows;
-  })();
-  const NINJA_BODY = [
-    sym('', 'N'.repeat(20)), sym('', 'N'.repeat(22)), sym('', 'n' + 'N'.repeat(22) + 'n'), sym('', 'n' + 'N'.repeat(22) + 'n'),
-    sym('', 'n' + 'N'.repeat(22) + 'n'), sym('', 'g'.repeat(24)), sym('', 'n' + 'N'.repeat(22) + 'n'), sym('', 'nn' + 'N'.repeat(20) + 'nn')
-  ];
   const CHARS = {
     glitch: { head: GLITCH_HEAD, body: GLITCH_BODY, split: true,
       pal: { g: '#10c070', G: '#60ffb0', k: '#081010', m: '#ff30c0', c: '#30e8ff', w: '#f0fff8' } },
     vamp: { head: VAMP_HEAD, body: VAMP_BODY,
       pal: { H: '#16121e', h: '#3e3850', e: '#ece4f2', E: '#b8acc8', k: '#d8d0e4', C: '#1c0e16', P: '#2e1424', c: '#c0182e' } },
-    chef: { head: CHEF_HEAD, body: CHEF_BODY,
-      pal: { W: '#fafafa', w: '#d8d8e0', b: '#c8c8d0', R: '#6a4428', r: '#4a2e18', k: '#f1c9a0', K: '#d8ad86', e: '#d09a78', s: '#d8382f', C: '#f4f4f4', c: '#c8c8d4' } },
-    robot: { head: ROBOT_HEAD, body: ROBOT_BODY,
-      pal: { M: '#a8b0bc', m: '#7a8290', L: '#c8d0dc', A: '#ff4040', a: '#5a6270', b: '#ffd040', g: '#3a4250', r: '#ff4040', G: '#40e070' } },
-    cat: { head: CAT_HEAD, body: CAT_BODY, pal: { O: '#f09a3a', o: '#c86a1a', W: '#fff4e0', P: '#ffb0c0' } },
-    ninja: { head: NINJA_HEAD, body: NINJA_BODY, pal: { N: '#1c1c24', n: '#2e2e3a', B: '#d8382f', g: '#5a5a66' } },
     ghost: { head: GHOST_HEAD, body: GHOST_BODY,
       pal: { o: 'rgba(150,178,236,0.9)', W: 'rgba(246,249,255,0.86)', w: 'rgba(200,214,244,0.82)', g: 'rgba(214,236,255,0.6)' } }
   };
@@ -1045,7 +987,7 @@ window.PK = window.PK || {};
     if (fx.slow > 0) cap *= 0.55;
     if (fx.buff > 0) cap *= fx.buffMul || 1;
     if (inPuddle) cap *= 0.92;
-    if (!k.isPlayer) cap *= (k.ai.skill || 0.9) * (k.ai.rubber || 1);
+    // AI top speed = exactly its def (main.js gives AI karts AI_SPEED = 1.15x): no skill / rubber-band scaling
 
     // ---- longitudinal ----
     let acc = d.acc;
@@ -1192,8 +1134,22 @@ window.PK = window.PK || {};
     k.idx = r.i; k.lat = r.lat;
     k.offroad = Math.abs(r.lat) > T.OFFROAD_D;
 
+    // maze side corridors: inside one, its own walls hold the kart instead of the invisible wall
+    const sp = T.spurAt && Math.abs(r.lat) > T.BARRIER - 6 ? T.spurAt(k.x, k.y) : null;
+    if (sp) {
+      k.offroad = false;
+      const s = sp.s, HW = 10, end = T.BARRIER + s.L - 6;
+      let al = sp.al, pp = sp.pp, hit = false;
+      if (Math.abs(pp) > HW) { pp = Math.sign(pp) * HW; hit = true; }
+      if (al > end) { al = end; hit = true; }
+      if (hit) {
+        k.x = s.x0 + s.nx * al + s.tx * pp; k.y = s.y0 + s.ny * al + s.ty * pp;
+        if (k._bumpT <= 0 && Math.abs(k.v) > 25) { k.v *= 0.7; k._bumpT = 0.35; sfx(G, k, 'bump'); if (k.drift) { k.drift = false; k.driftDir = 0; k.charge = 0; } }
+        else k.v *= 1 - 1.2 * dt;
+      }
+    }
     // invisible wall
-    if (Math.abs(r.lat) > T.BARRIER) {
+    if (!sp && Math.abs(r.lat) > T.BARRIER) {
       const t = T.TAN[r.i], p = T.PTS[r.i], s = r.lat > 0 ? 1 : -1;
       // how hard it hit: the speed going into the wall (straight-on hits hurt, glancing ones scrape)
       const imp = Math.abs(k.v) * Math.abs(Math.sin(angDiff(t, k.ma)));
@@ -1225,6 +1181,10 @@ window.PK = window.PK || {};
       k.a = wrapAng(k.a + angDiff(k.a, along) * Math.min(1, 3 * dt) * 0.5);
     }
 
+    // maze escape: reaching the EXIT gate on the first (only) lap finishes the race
+    if (T.exitIdx && k.lap === 1 && k.maxLap < 2 && k.idx >= T.exitIdx && k.idx < T.exitIdx + 14) {
+      k.lap = 2; k.maxLap = 2; if (G && G.onLap) G.onLap(k);
+    }
     // laps
     if (oldIdx > 0.8 * N && k.idx < 0.2 * N) {
       k.lap++;
@@ -1436,7 +1396,7 @@ window.PK = window.PK || {};
         target = 1 + clamp(gap * 0.25, -0.07, 0.07);
         if (G.hard) target = Math.max(target, 1.03);   // glitch map: the field never eases off
       }
-      ai.rubber += (target - ai.rubber) * Math.min(1, dt * 0.8);
+      ai.rubber = 1;   // no catch-up / slow-down: the AI always runs at AI_SPEED (1.15x)
     } else ai.rubber = 1;
 
     // ---- racing line target ----
@@ -1467,7 +1427,7 @@ window.PK = window.PK || {};
       const wgt = 1 - m / (span * 1.6);
       if (kap * wgt > kMax) kMax = kap * wgt;
     }
-    let cap = d.maxV * skill * ai.rubber;
+    let cap = d.maxV;   // flat out at its (1.15x) top speed where the corners allow
     const turnEff = d.turn * 0.74 * (0.75 + skill * 0.25);
     let vt = kMax > 1e-4 ? Math.min(cap, turnEff / kMax) : cap;
     if (k.drift) vt = Math.max(vt, cap * 0.85);   // drifting turns tighter
@@ -1730,30 +1690,6 @@ window.PK = window.PK || {};
       face('#60ffb0', '#10c070', '#ff30c0');
       R('#081010', 8, 5, 16, 5); eyes('#ff30c0');
       R('rgba(255,48,192,0.6)', 6, 11, 20, 2); R('rgba(48,232,255,0.6)', 9, 17, 18, 1); R('#081010', 4, 23, 7, 1);
-    } else if (ch === 'chef') {
-      face('#f1c9a0', '#f4f4f4', '#d8382f');
-      R('#fafafa', 9, 0, 14, 7); R('#fafafa', 7, 2, 18, 4); R('#d8d8e0', 9, 7, 14, 2);                            // tall hat + band
-      R('#6a4428', 8, 9, 2, 4); R('#6a4428', 22, 9, 2, 4);
-      eyes(); mouth(); blush(); R('#4a2e18', 13, 17, 6, 1);                                                        // moustache
-    } else if (ch === 'robot') {
-      R('#7a8290', 6, 25, 20, 7); R('#c8d0dc', 10, 27, 12, 4); R('#ff4040', 12, 28, 2, 2); R('#40e070', 18, 28, 2, 2);
-      R('#3a4250', 13, 22, 6, 3);
-      R('#a8b0bc', 6, 5, 20, 17); R('#7a8290', 6, 20, 20, 2); R('#ffd040', 6, 7, 2, 2); R('#ffd040', 24, 7, 2, 2);
-      R('#1a2030', 8, 11, 16, 6); R('#30e8ff', 10, 13, 4, 2); R('#30e8ff', 18, 13, 4, 2);                          // visor eyes
-      R('#5a6270', 15, 1, 2, 4); R('#ff4040', 14, 0, 4, 2); R('#3a4250', 12, 19, 8, 1);
-    } else if (ch === 'cat') {
-      R('#f09a3a', 6, 25, 20, 7); R('#fff4e0', 12, 25, 8, 7);
-      R('#f09a3a', 7, 6, 18, 17); R('#f09a3a', 6, 9, 20, 11);
-      R('#f09a3a', 6, 1, 5, 7); R('#f09a3a', 21, 1, 5, 7); R('#ffb0c0', 8, 3, 2, 4); R('#ffb0c0', 22, 3, 2, 4);     // ears
-      R('#c86a1a', 14, 6, 4, 1); R('#c86a1a', 13, 8, 6, 1); R('#fff4e0', 11, 16, 10, 6);                           // stripes, muzzle
-      R('#3a9a40', 10, 12, 4, 3); R('#3a9a40', 18, 12, 4, 3); R('#101010', 11, 12, 1, 3); R('#101010', 19, 12, 1, 3);
-      R('#ff7a9a', 15, 16, 2, 2); R('#5a3020', 14, 19, 4, 1);
-      R('#ffffff', 3, 17, 6, 1); R('#ffffff', 23, 17, 6, 1); R('#ffffff', 4, 19, 5, 1); R('#ffffff', 23, 19, 5, 1);
-    } else if (ch === 'ninja') {
-      R('#1c1c24', 5, 25, 22, 7); R('#5a5a66', 5, 30, 22, 2);
-      R('#1c1c24', 7, 4, 18, 20); R('#1c1c24', 6, 7, 20, 14); R('#2e2e3a', 13, 21, 6, 4);
-      R('#f1c9a0', 9, 11, 14, 5); eyes('#101018', 12);                                                              // eye slit
-      R('#d8382f', 6, 7, 20, 3); R('#d8382f', 25, 9, 3, 2); R('#d8382f', 26, 11, 3, 2); R('#d8382f', 27, 13, 2, 2);  // headband
     } else {
       // everyday people: hair style + colours from drv = [hair, shirt, skin, style, cap]
       const hair = v[0], shirt = v[1], skin = v[2] || '#f1c9a0', st = v[3] || '', cap = v[4] || dk(shirt, 0.7);

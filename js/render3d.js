@@ -435,6 +435,7 @@ window.PK = window.PK || {};
         const j = Math.min(Tk.N, i + every) % Tk.N, a = Tk.PTS[i], b = Tk.PTS[j], t = Tk.TAN[i], tb = Tk.TAN[j];
         const ax = a[0] - Math.sin(t) * lat * side, az = a[1] + Math.cos(t) * lat * side;
         const bx = b[0] - Math.sin(tb) * lat * side, bz = b[1] + Math.cos(tb) * lat * side;
+        if (Tk.spurAt && (Tk.spurAt(ax, az) || Tk.spurAt(bx, bz))) continue;   // maze corridor mouth
         box(ax, az, bx, bz, t, ((i / every) | 0) % 2 ? cA : cB);
       }
     }
@@ -478,6 +479,22 @@ window.PK = window.PK || {};
       // a low wall on the barrier (where the invisible wall stops the karts), rail colours on top
       floorGroup.add(edgeStrip(Tk, Tk.BARRIER + 1, 2, 3.2, RS.railDark || '#7a1c1c', RS.railDark || '#7a1c1c', 2));
       floorGroup.add((() => { const m = edgeStrip(Tk, Tk.BARRIER + 1, 2.4, 0.5, RS.railTop || '#cf3a2c', RS.railTop || '#cf3a2c', 2); m.position.y = 3.2; return m; })());
+    }
+    // maze: the hedges are solid 3D blocks (fixed in place, no turning billboards); main.js skips their sprites
+    if (Tk.def && Tk.def.escape) {
+      const sideMats = new Map(), topMat = new THREE.MeshLambertMaterial({ color: 0x2f7a34 }), geos = new Map();
+      for (const p of Tk.props || []) {
+        if (p.kind !== 'hedge' || !p.spr) continue;
+        let sm = sideMats.get(p.spr);
+        if (!sm) { sm = new THREE.MeshLambertMaterial({ map: pixelTex(p.spr, false), alphaTest: 0.5 }); sideMats.set(p.spr, sm); }
+        const w = p.w, h = Math.round(w * p.spr.height / p.spr.width), key = w + 'x' + h;
+        let geo = geos.get(key);
+        if (!geo) { geo = new THREE.BoxGeometry(w, h, w * 0.92); geo.translate(0, h / 2, 0); geos.set(key, geo); }
+        const m = new THREE.Mesh(geo, [sm, sm, topMat, topMat, sm, sm]);
+        const r = Tk.nearestAll(p.x, p.y);
+        m.position.set(p.x, 0, p.y); m.rotation.y = -(Tk.TAN[r.i] || 0);
+        floorGroup.add(m);
+      }
     }
     if (Tk._bg) {
       const PER = C().PER, HZ = C().HORIZON;

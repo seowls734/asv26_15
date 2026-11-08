@@ -16,7 +16,7 @@ window.PK = window.PK || {};
   const AI_SPEED = 1.15;                                          // AI rivals run 1.15× the player's speed
   // the cup rotation: every non-secret map in PK.Track.MAPS (0–3, plus any new ones such as the maze map)
   let REGULAR = [0, 1, 2, 3];
-  const NORMAL_KARTS = [0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13], GHOST_KARTS = [6, 7];   // rivals come from NORMAL_KARTS   // vampire + ghost join the ghost map
+  const NORMAL_KARTS = [0, 1, 2, 3, 4, 5, 9], GHOST_KARTS = [6, 7];   // rivals come from NORMAL_KARTS   // vampire + ghost join the ghost map
   // the ghost kart (7) becomes playable: top 3 on the ghost map gives a 50% chance to win it
   const GHOST_KART = 7, LS_GHOST_KART = 'pk_ghost_kart', GHOST_REWARD_PLACE = 3, GHOST_REWARD_CHANCE = 0.5;
   // glitch map (PK.Track map 5): 1% roll before the ghost roll, hard AI; 1st place unlocks the glitch kart (8)
@@ -78,22 +78,30 @@ window.PK = window.PK || {};
   const mapInfo = (id) => MAPS()[id] || MAPS()[0];
   const ghostOwned = () => lsGet(LS_GHOST_KART) === '1';
   const glitchOwned = () => lsGet(LS_GLITCH_KART) === '1';
+  // 👵 할머니: not for sale — she joins after 5 minutes of racing in total (any mode)
+  const GRAN_KART = 9, LS_GRAN = 'pk_gran_kart', LS_PLAYT = 'pk_playtime', GRAN_T = 300;
+  const granOwned = () => lsGet(LS_GRAN) === '1';
+  let playT = -1, playSave = 0;
+  function playTick(dt) {
+    if (G.attract || G.state !== 'race' || granOwned()) return;
+    if (playT < 0) playT = +lsGet(LS_PLAYT) || 0;
+    playT += dt; playSave += dt;
+    if (playSave > 5) { playSave = 0; lsSet(LS_PLAYT, String(Math.round(playT))); }
+    if (playT >= GRAN_T) {
+      lsSet(LS_PLAYT, String(Math.round(playT))); lsSet(LS_GRAN, '1');
+      achQueue.unshift({ head: '👵 할머니 캐릭터 획득!', sub: '5분 넘게 달렸어요 · 카트 선택에서 할머니를 고를 수 있어요' });
+      achShowNext(); sfx('finish');
+    }
+  }
   const hasGlitchMap = () => !!MAPS()[GLITCH_MAP];
   // characters: only 레드 (0) is free; the other basic karts and the vampire are bought with food
   // coins in the shop. Ghost / glitch are never for sale — they are won on their secret maps.
-  const FREE_KART = 0;
+  const FREE_KARTS = [0, 1, 2];   // 레드 · 블루 · 그린: free from the start
   const CHAR_SHOP = [
-    { def: 1, key: 'pk_own_kart_1', price: 10 },
-    { def: 2, key: 'pk_own_kart_2', price: 15 },
     { def: 3, key: 'pk_own_kart_3', price: 15 },
     { def: 4, key: 'pk_own_kart_4', price: 20 },
     { def: 5, key: 'pk_own_kart_5', price: 25 },
     { def: 6, key: 'pk_own_kart_6', price: 50 },   // 뱀파이어: the only special character for sale
-    { def: 9, key: 'pk_own_kart_9', price: 30 },    // 요리사
-    { def: 10, key: 'pk_own_kart_10', price: 35 },  // 할머니
-    { def: 11, key: 'pk_own_kart_11', price: 40 },  // 로봇
-    { def: 12, key: 'pk_own_kart_12', price: 45 },  // 고양이
-    { def: 13, key: 'pk_own_kart_13', price: 55 },  // 닌자
   ];
   const charOwned = (c) => lsGet(c.key) === '1';
   // everyday cart bodies (cosmetic, PK.Karts.BODIES): the shopping cart is free, the rest are bought
@@ -130,10 +138,11 @@ window.PK = window.PK || {};
     if (PK.Karts.setPlayerDeco) { try { PK.Karts.setPlayerDeco(decoWorn()); } catch (e) { /* ignore */ } }
   }
   const playable = () => {
-    const r = [FREE_KART];
+    const r = FREE_KARTS.slice();
     CHAR_SHOP.forEach((c) => { if (charOwned(c) && c.def < PK.Karts.DEFS.length) r.push(c.def); });
     if (ghostOwned()) r.push(GHOST_KART);
     if (glitchOwned() && GLITCH_KART < PK.Karts.DEFS.length) r.push(GLITCH_KART);
+    if (granOwned() && GRAN_KART < PK.Karts.DEFS.length) r.push(GRAN_KART);
     return r;
   };
   let ghostReward = '';   // '', 'got', 'miss' (ghost map) or 'glitch' (glitch map) for the results panel
@@ -1668,6 +1677,7 @@ window.PK = window.PK || {};
     const glitch = mapId === GLITCH_MAP;
     G.hard = glitch && !attract;
     best = loadBest(mapId);
+    C.LAPS = PK.Track.def && PK.Track.def.escape ? 1 : 3;   // the maze is one run to the EXIT
     PK.Skills.reset();
     const T = PK.Track, N = T.N, nDefs = PK.Karts.DEFS.length;
     let order = shuffle(NORMAL_KARTS.filter((i) => i !== defIdx && i < nDefs));
@@ -2229,6 +2239,7 @@ window.PK = window.PK || {};
       }
     } else if (st === 'race' || st === 'finished') {
       G.raceTime += dt;
+      playTick(dt);
       if (st === 'finished') finT += dt;
       simulate(dt);
       if (st === 'race') { updateSale(dt); trackPos(dt); refreshTb(); ghostRecord(); rstatTick(); }
@@ -2318,8 +2329,10 @@ window.PK = window.PK || {};
   let pfx_ = 1, pfy_ = 0, prx_ = 0, pry_ = 1;
 
   // project one world object; returns true if added
+  let losCheck = false;   // maze + 3D floor: hide what a 3D hedge stands in front of
   function addBill(n, x, y, h, spr, w, kart) {
     const dx = x - camX, dy = y - camY;
+    if (losCheck && !(kart && kart.isPlayer) && G.player && !PK.Track.seeThrough(G.player.x, G.player.y, x, y)) return n;
     const z = dx * pfx_ + dy * pfy_;
     if (z < 3 || z > FOG_FAR) return n;
     const s = FOCAL / z;
@@ -2337,7 +2350,10 @@ window.PK = window.PK || {};
     pfx_ = Math.cos(camA); pfy_ = Math.sin(camA); prx_ = -pfy_; pry_ = pfx_;
     let n = 0;
     const props = T.props || [];
-    for (let i = 0; i < props.length; i++) { const p = props[i]; if (p.spr) n = addBill(n, p.x, p.y, 0, p.spr, p.w, null); }
+    // maze with the 3D floor: hedges are real 3D blocks there (render3d.js), so no flat sprites for them
+    const solidHedge = useFloor3d() && T.def && T.def.escape;
+    losCheck = !!solidHedge && !!T.seeThrough;
+    for (let i = 0; i < props.length; i++) { const p = props[i]; if (p.spr && !(solidHedge && p.kind === 'hedge')) n = addBill(n, p.x, p.y, 0, p.spr, p.w, null); }
     const ks = G.karts;
     for (let i = 0; i < ks.length; i++) { const k = ks[i]; n = addBill(n, k.x, k.y, 0, null, KART_W, k); }
     if (ghostPlace()) n = addBill(n, ghKart.x, ghKart.y, 0, null, KART_W, ghKart);
@@ -2825,8 +2841,13 @@ window.PK = window.PK || {};
 
     // lap (top-left)
     const lap = U.clamp(p.lap || 1, 1, C.LAPS);
+    if (PK.Track.exitIdx) {   // maze: how far to the exit
+      const pc = p.lap >= 1 ? U.clamp(Math.round(p.idx / PK.Track.exitIdx * 100), 0, 100) : 0;
+      text('EXIT', 4, 4, 1, '#7af08a'); text(pc + '%', 4, 11, 2, '#fff');
+    } else {
     text('LAP', 4, 4, 1, '#ffcc00');
     text(lap + '/' + C.LAPS, 4, 11, 2, '#fff');
+    }
     // race time (center top) + map name
     textC(fmt(G.raceTime || 0.0001).replace('--:--.--', '0:00.00'), CX, 4, 2, '#fff');
     if (ghostMode && !G.online) textC(ghRun ? 'GHOST ' + fmt(ghRun.t) : 'GHOST: FIRST RUN', CX, coarse ? 24 : 16, 1, '#bfe4ff', true);
