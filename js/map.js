@@ -2126,7 +2126,7 @@ window.PK = window.PK || {};
       tile: tileMart, fog: '#ece2cd', bg: () => bgMart({ banners: ['SALE', 'FRESH', 'DRINK'], glow: true }), road: ROAD_MART, puddle: MILK, decor: decor0, stencil: ['SALE', 'CART'],
       pads: [[0.07, 8], [0.30, -8], [0.62, 0], [0.70, 9]],
       puddles: [[0.19, -9, 8], [0.475, 10, 7], [0.80, -10, 9], [0.875, 9, 8]],
-      ice: [], grip: 1, theme: 1, fx: 'none', seed: 20261107, mini: { bg: 'rgba(236,226,205,0.16)', edge: '#f2c418', road: '#fffaf0' }, props: props0
+      ice: [], grip: 1, theme: 1, fx: 'mart', seed: 20261107, mini: { bg: 'rgba(236,226,205,0.16)', edge: '#f2c418', road: '#fffaf0' }, props: props0
     },
     {
       id: 1, name: 'FREEZER CORNER', nameKo: '냉동 코너', secret: false,
@@ -2153,7 +2153,7 @@ window.PK = window.PK || {};
       tile: tileWood, fog: '#efe2c0', bg: () => bgMarket('#efe2c0'), road: ROAD_WOOD, puddle: JUICE, decor: decor2, stencil: ['FRESH'],
       pads: [[0.06, 0], [0.33, 7], [0.56, -6], [0.66, 0]],
       puddles: [[0.22, 8, 8], [0.45, -9, 7], [0.78, 9, 8], [0.90, -8, 7]],
-      ice: [], grip: 1, theme: 1, fx: 'none', seed: 777002, mini: { bg: 'rgba(240,226,190,0.16)', edge: '#4cb848', road: '#fff2c8' }, props: props2
+      ice: [], grip: 1, theme: 1, fx: 'market', seed: 777002, mini: { bg: 'rgba(240,226,190,0.16)', edge: '#4cb848', road: '#fff2c8' }, props: props2
     },
     {
       id: 3, name: 'ROOFTOP PARKING', nameKo: '옥상 주차장', secret: false,
@@ -2207,7 +2207,7 @@ window.PK = window.PK || {};
       tile: tileLawn, fog: '#d4ecd0', bg: () => bgGarden('#d4ecd0'), road: ROAD_GARDEN, puddle: MUD, skid: 'rgba(90,70,50,0.22)', stencil: ['MAZE'],
       pads: [[0.04, 0], [0.384, 6], [0.612, -6], [0.89, 0]],
       puddles: [[0.258, 8, 7], [0.48, -8, 7], [0.738, 8, 7]],
-      ice: [], grip: 1, theme: 1, fx: 'none', seed: 777006, mini: { bg: 'rgba(60,120,60,0.2)', edge: '#2f7a34', road: '#e8dcc0' },
+      ice: [], grip: 1, theme: 1, fx: 'garden', seed: 777006, mini: { bg: 'rgba(60,120,60,0.2)', edge: '#2f7a34', road: '#e8dcc0' },
       props: props6, decor: decor6, overRoad: road6
     }
   ];
@@ -2783,6 +2783,31 @@ window.PK = window.PK || {};
         if (rnd() < 0.35) {
           const sd = rnd() < 0.5 ? 1 : -1, q = at(i, sd * (half - 1 - rnd() * 2));
           g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(q[0] | 0, q[1] | 0, 1 + (rnd() * 2 | 0), 1);
+        }
+      }
+      // wear: two polished tyre lanes (faint dark bands) following the line, a lighter crown between
+      if (def.wear !== false) {
+        g.setLineDash([]); g.lineCap = 'round';
+        for (const [lat, w, col] of [[-half * 0.42, 5, 'rgba(0,0,0,0.07)'], [half * 0.42, 5, 'rgba(0,0,0,0.07)'], [-half * 0.42, 2, 'rgba(0,0,0,0.06)'], [half * 0.42, 2, 'rgba(0,0,0,0.06)'], [0, 3, 'rgba(255,255,255,0.035)']]) {
+          g.lineWidth = w; g.strokeStyle = col; g.beginPath();
+          for (let i = 0; i <= N; i++) { const q = at(i % N, lat); if (i === 0) g.moveTo(q[0], q[1]); else g.lineTo(q[0], q[1]); }
+          g.stroke();
+        }
+        g.lineCap = 'butt';
+        // patched seams across the road and a few oil / juice stains
+        for (let i = 12; i < N - 12; i += 9 + ((rnd() * 14) | 0)) {
+          if (rnd() < 0.45) {
+            const a = at(i, -half + 3 + rnd() * 4), b = at(i + ((rnd() * 3) | 0) - 1, half - 3 - rnd() * 4);
+            g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 1; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+            g.strokeStyle = 'rgba(255,255,255,0.07)'; g.beginPath(); g.moveTo(a[0] + 1, a[1] + 1); g.lineTo(b[0] + 1, b[1] + 1); g.stroke();
+          }
+          if (rnd() < 0.3) {
+            const q = at(i, (rnd() * 2 - 1) * half * 0.6), r0 = 2 + rnd() * 3;
+            g.fillStyle = 'rgba(10,8,14,0.10)';
+            g.beginPath(); g.ellipse(q[0], q[1], r0 * 1.4, r0, rnd() * 3, 0, Math.PI * 2); g.fill();
+            g.fillStyle = 'rgba(10,8,14,0.07)';
+            g.beginPath(); g.ellipse(q[0] + r0, q[1] - r0 * 0.5, r0 * 0.7, r0 * 0.5, rnd() * 3, 0, Math.PI * 2); g.fill();
+          }
         }
       }
       // drift marks: paired arcs swinging to the outside of every real corner

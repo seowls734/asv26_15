@@ -278,6 +278,7 @@ window.PK = window.PK || {};
   function goModes() { G.state = 'modes'; G.attract = true; showOnly('modes'); }
   function goSettings() {
     G.state = 'settings'; G.attract = true; showOnly('settings');
+    const jc = document.getElementById('btnJoyCfg'); if (jc) jc.style.display = document.getElementById('btnCfg') ? '' : 'none';
   }
   function goGhostMode() { ghostMode = true; gp = null; goMaps(); }
   // finish in ghost mode: who won? (old = the ghost's time before this run, 0 = no ghost yet)
@@ -539,6 +540,19 @@ window.PK = window.PK || {};
     goTitle();
   }
 
+  // ---- 🏁 finish buttons over the results: 로비로 / 다시 하기 / 다음 맵 (or GP round / results)
+  let finBarOn = false;
+  function finBarTick() {
+    const on = G.state === 'finished' && finT > 1.2 && !G.online;
+    if (on === finBarOn) return;
+    finBarOn = on;
+    const b = document.getElementById('finBar');
+    if (!b) return;
+    b.classList.toggle('on', on);
+    const tc = document.getElementById('touch'); if (tc) tc.classList.toggle('fin', on);   // touch controls step aside for the results
+    const nx = document.getElementById('finNext');
+    if (on && nx) nx.textContent = gp ? (gp.round + 1 < gp.maps.length ? '▶ 다음 라운드 (Enter)' : '🏆 그랑프리 결과 (Enter)') : testMode ? '▶ 계속 (Enter)' : '▶ 다음 맵 (Enter)';
+  }
   // ---- cutscene runner (js/intro.js)
   function playScript(name, ctx, done) {
     if (!PK.Intro) { setTimeout(done, 0); return; }
@@ -1844,6 +1858,10 @@ window.PK = window.PK || {};
     on(el.btnEasy, () => { ensureAudio(); toggleEasy(); });
     on(document.getElementById('btnIntro'), () => { ensureAudio(); uiBeep(1); playIntro(); });
     on(document.getElementById('btnGP'), () => { ensureAudio(); uiBeep(1); goGP(); });
+    on(document.getElementById('finLobby'), () => { ensureAudio(); uiBeep(0); finBarOn = false; document.getElementById('finBar').classList.remove('on'); gp = null; goTitle(); });
+    on(document.getElementById('finRetry'), () => { ensureAudio(); uiBeep(1); retryRace(); });
+    on(document.getElementById('finNext'), () => { ensureAudio(); uiBeep(1); nextRace(); });
+    on(document.getElementById('btnJoyCfg'), () => { ensureAudio(); uiBeep(1); if (PK.Joystick && PK.Joystick.openSettings) PK.Joystick.openSettings(); });
     on(document.getElementById('btnModes'), () => { ensureAudio(); uiBeep(1); goModes(); });
     on(document.getElementById('btnSettings'), () => { ensureAudio(); uiBeep(1); goSettings(); });
     on(document.getElementById('modesBack'), () => { uiBeep(0); goTitle(); });
@@ -2027,6 +2045,7 @@ window.PK = window.PK || {};
     updateParts(dt);
     if (mapBannerT > 0) { mapBannerT -= dt; if (mapBannerT <= 0) hideMapBanner(); }
     tutTick(dt);
+    finBarTick();
     if (st === 'title' || st === 'select' || st === 'maps' || st === 'shop' || st === 'dex' || st === 'ach' || st === 'rank' || st === 'online' || st === 'ctest' || st === 'mtest') {
       simulate(dt);
       attractT += dt;
@@ -2338,6 +2357,7 @@ window.PK = window.PK || {};
       fg.addColorStop(0, 'rgba(220,240,255,0)'); fg.addColorStop(1, 'rgba(220,240,255,0.42)');
       f.fillStyle = fg; f.fillRect(0, 0, W, H);
     } catch (e) { fxDusk = null; fxFrost = null; }
+    ambBuild();
     const rnd = U.rng(777);
     for (let i = 0; i < 26; i++) SNOW.push({ x: rnd() * W, y: rnd() * H, v: 8 + rnd() * 14, z: 0.3 + rnd() * 0.7, ph: rnd() * 6, s: rnd() < 0.3 ? 2 : 1 });
     for (let i = 0; i < 9; i++) WISPS.push({ x: rnd() * 1000, y: HOR - 6 + rnd() * 70, v: 3 + rnd() * 6, s: 0.8 + rnd() * 1.6, ph: rnd() * 6 });
@@ -2399,9 +2419,11 @@ window.PK = window.PK || {};
       ctx.restore();
     }
     const fx = PK.Track.fx;
+    drawLight(fx);
     if (fx === 'haunted') drawNightFx();
     else if (fx === 'dusk') drawDuskFx();
     else if (fx === 'frost') drawFrostFx();
+    drawAmbient(fx);
     if (fx === 'glitch' || glitchT > 0) drawGlitchFx(fx === 'glitch' && G.state !== 'paused');
     if (surpriseT > 0 && !calm) drawSurprise();
     drawSpeedLines();
@@ -2422,6 +2444,126 @@ window.PK = window.PK || {};
       const x = ((((f.x + Math.sin(t * 0.8 + f.ph) * 8 - camA * 160 * f.z) % (W + 8)) + W + 8) % (W + 8)) - 4;
       const y = (((f.y + t * f.v) % (H + 4)) + H + 4) % (H + 4) - 2;
       ctx.fillRect(Math.round(x), Math.round(y), f.s, f.s);
+    }
+  }
+  // ---------------------------------------------------------------------------
+  // 🌫 ambience: depth particles per map (they rush toward you with your speed and swing when you
+  // turn) + light layers. mart: dust in the ceiling-light beams · market: falling leaves + sunbeams ·
+  // garden: petals, butterflies + sun glow · haunted: fireflies · frost: deep snow · dusk: floating dust.
+  // ---------------------------------------------------------------------------
+  const AMB = [];
+  let ambKind = '', ambCam = 0, fxBeams = null, fxSun = null, fxWarm = null;
+  const AMB_STYLE = {
+    mart:    { n: 26, cols: ['rgba(255,250,230,0.55)', 'rgba(255,240,200,0.4)'], fall: -0.02, sway: 0.15, size: 1.6 },
+    market:  { n: 22, cols: ['#e8a030', '#c86a28', '#8cc048', '#f0d060'], fall: 0.16, sway: 0.6, size: 2.4, leaf: true },
+    garden:  { n: 24, cols: ['#ffd0e0', '#ffffff', '#ffb0c8', '#fff0a0'], fall: 0.1, sway: 0.5, size: 2.2, leaf: true, fly: 3 },
+    haunted: { n: 18, cols: ['#b8ff9a', '#7af08a'], fall: -0.01, sway: 0.25, size: 1.8, glow: true },
+    frost:   { n: 34, cols: ['rgba(255,255,255,0.9)', 'rgba(230,245,255,0.8)'], fall: 0.22, sway: 0.3, size: 2 },
+    dusk:    { n: 16, cols: ['rgba(255,210,170,0.5)', 'rgba(255,180,140,0.4)'], fall: -0.01, sway: 0.2, size: 1.4 },
+  };
+  function ambSpawn(o, far) {
+    o.u = Math.random() * 2 - 1; o.h = Math.random() * 1.6 - 0.5; o.z = far ? 4 + Math.random() * 4 : 0.8 + Math.random() * 7;
+    o.ph = Math.random() * 6.28; o.c = (Math.random() * 4) | 0; o.fly = false;
+  }
+  function ambBuild() {
+    try {
+      // ceiling light beams (mart): soft vertical shafts fading down
+      fxBeams = document.createElement('canvas'); fxBeams.width = 40; fxBeams.height = 120;
+      let g = fxBeams.getContext('2d');
+      let gr = g.createLinearGradient(0, 0, 0, 120);
+      gr.addColorStop(0, 'rgba(255,248,225,0.30)'); gr.addColorStop(1, 'rgba(255,248,225,0)');
+      g.fillStyle = gr; g.beginPath(); g.moveTo(14, 0); g.lineTo(26, 0); g.lineTo(40, 120); g.lineTo(0, 120); g.closePath(); g.fill();
+      // diagonal sunbeams (market / garden)
+      fxSun = document.createElement('canvas'); fxSun.width = W; fxSun.height = H;
+      g = fxSun.getContext('2d');
+      for (let i = 0; i < 4; i++) {
+        const x0 = -40 + i * 70;
+        gr = g.createLinearGradient(x0, 0, x0 + 120, H);
+        gr.addColorStop(0, 'rgba(255,240,190,0.16)'); gr.addColorStop(1, 'rgba(255,240,190,0)');
+        g.fillStyle = gr; g.beginPath(); g.moveTo(x0, 0); g.lineTo(x0 + 22 + i * 4, 0); g.lineTo(x0 + 150, H); g.lineTo(x0 + 90, H); g.closePath(); g.fill();
+      }
+      const sg = g.createRadialGradient(20, 0, 0, 20, 0, 150);
+      sg.addColorStop(0, 'rgba(255,245,200,0.35)'); sg.addColorStop(1, 'rgba(255,245,200,0)');
+      g.fillStyle = sg; g.fillRect(0, 0, W, H);
+      // warm indoor grade + soft vignette (mart)
+      fxWarm = document.createElement('canvas'); fxWarm.width = W; fxWarm.height = H;
+      g = fxWarm.getContext('2d');
+      const vg = g.createRadialGradient(CX, H * 0.6, 70, CX, H * 0.6, W * 0.62);
+      vg.addColorStop(0, 'rgba(60,30,10,0)'); vg.addColorStop(1, 'rgba(50,25,10,0.28)');
+      g.fillStyle = vg; g.fillRect(0, 0, W, H);
+    } catch (e) { fxBeams = fxSun = fxWarm = null; }
+  }
+  function drawAmbient(kind) {
+    const st = AMB_STYLE[kind];
+    if (!st) return;
+    if (ambKind !== kind) {   // new map: fresh particles spread through the depth
+      ambKind = kind; AMB.length = 0;
+      for (let i = 0; i < st.n; i++) { const o = {}; ambSpawn(o, false); AMB.push(o); }
+      ambCam = camA;
+    }
+    const dt = DT, p = G.player, run = G.state === 'race' || G.state === 'finished' || G.state === 'countdown';
+    const sp = run && p ? Math.min(2, Math.abs(p.v || 0) / 90) : 0.15;
+    const dA = U.angDiff(ambCam, camA); ambCam = camA;
+    const t = G.time;
+    for (let i = 0; i < AMB.length; i++) {
+      const o = AMB[i];
+      if (G.state !== 'paused') {
+        o.z -= dt * (0.25 + sp * 2.2);                  // rushing toward the camera
+        o.u -= dA * 1.6 * Math.min(2, 3 / o.z);         // the view turns: near ones swing more
+        o.h -= dt * st.fall;                            // falling (or rising dust)
+        o.u += Math.sin(t * 1.3 + o.ph) * dt * st.sway * 0.1;
+      }
+      const sx = CX + (o.u * 170) / o.z, sy = HOR - 4 - (o.h * 70) / o.z;
+      if (o.z < 0.35 || sx < -20 || sx > W + 20 || sy > H + 10 || sy < -20) { ambSpawn(o, true); continue; }
+      const near = Math.min(1, 2.2 / o.z), sz = Math.max(1, Math.round(st.size * near * 1.6));
+      const fade = o.z > 6 ? (8 - o.z) / 2 : 1;
+      ctx.globalAlpha = Math.max(0, Math.min(1, fade));
+      if (st.glow) {                                    // fireflies: blinking glow
+        const b = 0.4 + 0.6 * Math.max(0, Math.sin(t * 3 + o.ph * 3));
+        ctx.globalAlpha *= b;
+        ctx.fillStyle = 'rgba(160,255,140,0.25)'; ctx.fillRect(Math.round(sx) - sz, Math.round(sy) - sz, sz * 3, sz * 3);
+        ctx.fillStyle = st.cols[o.c % st.cols.length]; ctx.fillRect(Math.round(sx), Math.round(sy), sz, sz);
+      } else if (st.leaf) {                             // leaves / petals: tumbling (width flips)
+        const fl = Math.abs(Math.sin(t * 4 + o.ph));
+        ctx.fillStyle = st.cols[o.c % st.cols.length];
+        const w = Math.max(1, Math.round(sz * (0.4 + fl))), hgt = Math.max(1, Math.round(sz * 0.7));
+        ctx.fillRect(Math.round(sx), Math.round(sy), w, hgt);
+      } else {
+        ctx.fillStyle = st.cols[o.c % st.cols.length];
+        ctx.fillRect(Math.round(sx), Math.round(sy), sz, sz);
+      }
+    }
+    // garden butterflies: a few flapping pairs drifting over the hedges
+    if (st.fly) {
+      for (let i = 0; i < st.fly; i++) {
+        const ph = i * 2.1, bx = ((t * 14 + i * 97 - camA * 120) % (W + 40) + W + 40) % (W + 40) - 20;
+        const by = HOR - 14 + Math.sin(t * 1.7 + ph) * 8 + i * 5, wing = (Math.sin(t * 18 + ph) > 0) ? 2 : 1;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = ['#ffe14d', '#ff9ad0', '#9fe8ff'][i % 3];
+        ctx.fillRect(Math.round(bx) - wing, Math.round(by), wing, 2); ctx.fillRect(Math.round(bx) + 1, Math.round(by), wing, 2);
+        ctx.fillStyle = '#3a2a20'; ctx.fillRect(Math.round(bx), Math.round(by), 1, 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawLight(kind) {
+    if (kind === 'mart' && fxBeams) {
+      // ceiling-light shafts, parallax with the heading
+      ctx.save();
+      try { ctx.globalCompositeOperation = 'lighter'; } catch (e) { /* ignore */ }
+      for (let i = 0; i < 5; i++) {
+        const x = ((((i * 78 - camA * 140) % (W + 80)) + W + 80) % (W + 80)) - 40;
+        ctx.globalAlpha = 0.5 + 0.15 * Math.sin(G.time * 0.6 + i);
+        ctx.drawImage(fxBeams, Math.round(x), 0, 40, HOR + 30);
+      }
+      ctx.restore();
+      if (fxWarm) ctx.drawImage(fxWarm, 0, 0);
+    } else if ((kind === 'market' || kind === 'garden') && fxSun) {
+      ctx.save();
+      try { ctx.globalCompositeOperation = 'lighter'; } catch (e) { /* ignore */ }
+      ctx.globalAlpha = kind === 'garden' ? 0.7 : 0.9;
+      ctx.drawImage(fxSun, 0, 0);
+      ctx.restore();
     }
   }
   // secret map surprise: purple/white strobe for a moment
