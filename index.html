@@ -128,7 +128,15 @@
   #finBar.on { display: flex; }
   #touch.fin { display: none !important; }
   #finBar .btn { margin: 0; font-size: .85em; padding: .35em .9em; }
+  #finXp { align-self: center; font-size: .8em; color: #9fe8ff; background: rgba(20,12,30,.85); border: .12em solid #000; padding: .3em .6em; }
+  #finXp:empty { display: none; }
+  #finXp.up { color: #ffe14d; }
   #daily { font-size: .8em; color: #9fe8ff; margin-top: .2em; }
+  #lvBar { display: flex; align-items: center; gap: .4em; font-size: .78em; margin: .1em 0 .3em; color: #e8e0f8; }
+  #lvBar b { color: #ffe14d; text-shadow: .08em .08em 0 #000; }
+  #lvBar .lvtrack { width: 8em; height: .55em; background: #1a1028; border: .12em solid #000; display: inline-block; }
+  #lvBar .lvtrack i { display: block; height: 100%; background: linear-gradient(90deg, #ffcc00, #ff8800); }
+  #lvBar small { color: #a898c8; }
   #daily.done { color: #8fe0a0; }
   #gpList { min-width: 16em; margin: .3em auto .5em; }
   .gprow { display: flex; gap: .6em; align-items: center; padding: .2em .6em; background: rgba(30, 20, 48, .85); border: .15em solid #000; margin: .15em 0; }
@@ -303,6 +311,7 @@
   </div>
   <div id="tutBox"></div>
   <div id="finBar">
+    <span id="finXp"></span>
     <button id="finLobby" class="btn alt">🏠 로비로</button>
     <button id="finRetry" class="btn alt">↻ 다시 하기 (R)</button>
     <button id="finNext" class="btn">▶ 다음 맵 (Enter)</button>
@@ -334,6 +343,7 @@
         <h1>픽셀 카트</h1>
         <div class="sub">PIXEL KART · 마트 레이스</div>
         <div id="playerTitle"></div>
+        <div id="lvBar"></div>
         <button id="btnStart" class="btn blink">▶ 게임 시작 (Enter)</button>
         <button id="btnModes" class="btn">🎮 다른 모드 (N)</button>
         <div class="tbar">

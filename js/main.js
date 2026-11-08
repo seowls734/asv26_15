@@ -551,7 +551,109 @@ window.PK = window.PK || {};
     b.classList.toggle('on', on);
     const tc = document.getElementById('touch'); if (tc) tc.classList.toggle('fin', on);   // touch controls step aside for the results
     const nx = document.getElementById('finNext');
+    const xb = document.getElementById('finXp');
+    if (on && xb) {
+      const L = levelOf(xpTotal());
+      xb.textContent = xpLast > 0 ? '⭐ +' + xpLast + ' XP · Lv.' + L.lv + (lvUpTo ? ' 레벨 업!' : '') + (shopDone() ? ' · 🛒 장보기 완료' : '') : '';
+      xb.classList.toggle('up', !!lvUpTo);
+    }
     if (on && nx) nx.textContent = gp ? (gp.round + 1 < gp.maps.length ? '▶ 다음 라운드 (Enter)' : '🏆 그랑프리 결과 (Enter)') : testMode ? '▶ 계속 (Enter)' : '▶ 다음 맵 (Enter)';
+  }
+  // ---------------------------------------------------------------------------
+  // ⭐ level & XP: every finished race gives XP (base + place + food + record + shopping list);
+  // each level-up pays coins, levels 5 / 10 / 20 also unlock an achievement + title.
+  // ---------------------------------------------------------------------------
+  const LS_XP = 'pk_xp';
+  const xpNeed = (lv) => 50 + lv * 30;                 // XP from level lv to lv+1
+  function xpTotal() { return Math.max(0, +lsGet(LS_XP) || 0); }
+  function levelOf(xp) {                               // -> { lv, cur, need }
+    let lv = 1, x = xp;
+    while (x >= xpNeed(lv) && lv < 99) { x -= xpNeed(lv); lv++; }
+    return { lv, cur: x, need: xpNeed(lv) };
+  }
+  let xpLast = 0, lvUpTo = 0;                          // this race's gain / new level (results screen)
+  function addXp(n) {
+    const before = levelOf(xpTotal()).lv;
+    lsSet(LS_XP, String(xpTotal() + n));
+    const L = levelOf(xpTotal());
+    xpLast = n; lvUpTo = L.lv > before ? L.lv : 0;
+    if (L.lv > before) {
+      let coins = 0;
+      for (let l = before + 1; l <= L.lv; l++) coins += 5 + l * 2;
+      setWallet(wallet() + coins);
+      achQueue.unshift({ head: '⭐ 레벨 업! Lv.' + L.lv, sub: '🍎 +' + coins + ' 코인' + (L.lv >= 5 && before < 5 ? ' · 칭호를 받았어요' : '') });
+      achShowNext();
+      if (L.lv >= 5) achGrant('lv5');
+      if (L.lv >= 10) achGrant('lv10');
+      if (L.lv >= 20) achGrant('lv20');
+    }
+    refreshLevel();
+  }
+  function raceXp(place) {
+    if (ghostMode) return 20 + (newRecord ? 15 : 0) + (shopDone() ? 30 : 0);
+    return 20 + ([40, 30, 22, 16, 12, 10][place - 1] || 8) + foodRace * 2 + (newRecord ? 15 : 0) + (shopDone() ? 30 : 0);
+  }
+  function refreshLevel() {
+    const b = document.getElementById('lvBar');
+    if (!b) return;
+    const L = levelOf(xpTotal());
+    b.innerHTML = '';
+    b.appendChild(mk('b', null, 'Lv.' + L.lv));
+    const bar = mk('span', 'lvtrack'), fill = mk('i', null);
+    fill.style.width = Math.round(L.cur / L.need * 100) + '%';
+    bar.appendChild(fill); b.appendChild(bar);
+    b.appendChild(mk('small', null, L.cur + ' / ' + L.need + ' XP'));
+  }
+
+  // ---------------------------------------------------------------------------
+  // 🛒 shopping list: each race 3 different foods that lie on this track; pick them all up and
+  // finish for 🍎 +5 and +30 XP. Shown as icons under the food counter (ticked when bought).
+  // ---------------------------------------------------------------------------
+  const SHOP_COINS = 5;
+  let shopList = [], shopGot = [], shopBannerT = -1;
+  const shopDone = () => shopList.length > 0 && shopGot.length >= shopList.length;
+  function shopListStart() {
+    shopList = []; shopGot = []; shopBannerT = -1;
+    if (G.online || testMode || !PK.Skills.foodKinds) return;
+    const ks = PK.Skills.foodKinds().slice();
+    if (ks.length < 3) return;
+    while (shopList.length < 3) shopList.push(ks.splice((Math.random() * ks.length) | 0, 1)[0]);
+    shopBannerT = 0.6;   // announced just after GO
+  }
+  function shopListTick(dt) {
+    if (shopBannerT < 0 || G.state !== 'race') return;
+    shopBannerT -= dt;
+    if (shopBannerT > 0) return;
+    shopBannerT = -1;
+    const b = el.mapBanner, nm = PK.Skills.foodName || (() => '');
+    if (!b || !shopList.length) return;
+    b.innerHTML = '';
+    b.appendChild(mk('b', null, '🛒 장보기: ' + shopList.map((k) => nm(k)).join(' · ')));
+    b.appendChild(mk('small', null, '3가지를 다 사고 완주하면 🍎 +' + SHOP_COINS + ' · +30 XP'));
+    b.className = 'on';
+    mapBannerT = 2.6;
+  }
+  function shopListFood(kind) {
+    if (!shopList.length || shopList.indexOf(kind) < 0 || shopGot.indexOf(kind) >= 0) return;
+    shopGot.push(kind);
+    const nm = PK.Skills.foodName || (() => '');
+    if (shopDone()) {
+      sfx('gauge');
+      const b = el.mapBanner;
+      if (b) { b.innerHTML = ''; b.appendChild(mk('b', null, '🛒 장보기 완료!')); b.appendChild(mk('small', null, '완주하면 🍎 +' + SHOP_COINS + ' · +30 XP')); b.className = 'on'; mapBannerT = 2.2; }
+    } else { toast('GOT ' + shopGot.length + '/' + shopList.length); }
+  }
+  // HUD: the list as food icons under the coin counter, ticked when bought
+  function drawShopList() {
+    if (!shopList.length) return;
+    const y = 41;
+    for (let i = 0; i < shopList.length; i++) {
+      const x = 4 + i * 12, got = shopGot.indexOf(shopList[i]) >= 0;
+      ctx.fillStyle = got ? 'rgba(40,140,60,0.85)' : 'rgba(20,12,30,0.7)'; ctx.fillRect(x - 1, y - 1, 11, 11);
+      const ic = PK.Skills.foodIcon && PK.Skills.foodIcon(shopList[i]);
+      if (ic) { ctx.globalAlpha = got ? 1 : 0.55; ctx.drawImage(ic, x, y, 9, 9); ctx.globalAlpha = 1; }
+      if (got) { ctx.fillStyle = '#7dff9a'; ctx.fillRect(x + 6, y + 6, 4, 4); ctx.fillStyle = '#0a2a12'; ctx.fillRect(x + 7, y + 7, 2, 2); }
+    }
   }
   // ---- cutscene runner (js/intro.js)
   function playScript(name, ctx, done) {
@@ -598,6 +700,7 @@ window.PK = window.PK || {};
     G.state = 'title'; G.attract = true; gp = null;
     showOnly('title');
     refreshDaily();
+    refreshLevel();
     refreshTitle();
     updateBestText();
     setupRace(randomKart(), true, baseMap);
@@ -1040,6 +1143,7 @@ window.PK = window.PK || {};
     surpriseT = surprise ? 1.4 : 0;
     showMapBanner(mapId, surprise);
     tutStart();
+    shopListStart(); xpLast = 0; lvUpTo = 0;
     if (musicCur === mapId) musicCur = null;   // restart the track on retry
     bgmRestart = true;
     musicPlay(mapId);
@@ -1122,6 +1226,9 @@ window.PK = window.PK || {};
     { id: 'rich', name: '부자', desc: '코인 100개 모으기', coins: 10, title: '💰 부자' },
     { id: 'collector', name: '수집가', desc: '캐릭터 3명 사기', coins: 15, title: '🧸 수집가' },
     { id: 'veteran', name: '베테랑', desc: '레이스 10판 완주하기', coins: 15, title: '🎖 베테랑' },
+    { id: 'lv5', name: '레벨 5', desc: '레벨 5 달성하기', coins: 10, title: '⭐ 단골손님' },
+    { id: 'lv10', name: '레벨 10', desc: '레벨 10 달성하기', coins: 20, title: '🌟 우수 고객' },
+    { id: 'lv20', name: '레벨 20', desc: '레벨 20 달성하기', coins: 40, title: '👑 VIP 고객' },
   ];
   function achDone() { try { const o = JSON.parse(lsGet(LS_ACH) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
   function stats() { try { const o = JSON.parse(lsGet(LS_STATS) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
@@ -1279,6 +1386,7 @@ window.PK = window.PK || {};
   function onFood(k, kind) {
     if (G.attract || !k.isPlayer || G.state !== 'race') return;
     dexRecord(kind);
+    shopListFood(kind);
     if (foodRace < FOOD_CAP) {
       foodRace++;
       toast(foodRace >= FOOD_CAP ? 'FOOD ' + FOOD_CAP + '/' + FOOD_CAP + ' MAX!' : '+1 FOOD ' + foodRace + '/' + FOOD_CAP);
@@ -1625,6 +1733,10 @@ window.PK = window.PK || {};
     if (!testMode && !ghostMode) achOnFinish(k);
     const place = computeStandings().indexOf(k) + 1;
     if (!testMode && !ghostMode && !G.online) dailyCheck(k, place);
+    if (!testMode && !G.online) {
+      if (shopDone()) setWallet(wallet() + SHOP_COINS);
+      addXp(raceXp(place));
+    }
     if (!testMode && PK.Rank) PK.Rank.submit(raceMap, k.finishTime, k.defIndex);   // ranking board
     musicStop();
   }
@@ -2046,6 +2158,7 @@ window.PK = window.PK || {};
     if (mapBannerT > 0) { mapBannerT -= dt; if (mapBannerT <= 0) hideMapBanner(); }
     tutTick(dt);
     finBarTick();
+    shopListTick(dt);
     if (st === 'title' || st === 'select' || st === 'maps' || st === 'shop' || st === 'dex' || st === 'ach' || st === 'rank' || st === 'online' || st === 'ctest' || st === 'mtest') {
       simulate(dt);
       attractT += dt;
@@ -2704,6 +2817,7 @@ window.PK = window.PK || {};
     const fi = PK.Skills.foodIcon && PK.Skills.foodIcon(0);
     if (fi) ctx.drawImage(fi, 4, 30, 9, 9);
     text(foodRace + '/' + FOOD_CAP, 15, 32, 1, foodRace >= FOOD_CAP ? '#ffcc00' : '#fff');
+    drawShopList();
     // drift combo (next to the boost label)
     if ((p.combo || 0) >= 2) text('X' + p.combo + ' COMBO', gx + 24, gy - 7, 1, blink ? '#ffe14d' : '#ff8800');
     // time sale countdown

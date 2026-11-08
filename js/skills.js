@@ -460,6 +460,8 @@ window.PK = window.PK || {};
   const saleLeft = () => saleT;
   const foodIcon = (i) => foodSpr[i | 0] || null;
   const foodName = (i) => FOOD_KO[i | 0] || '';
+  // kinds of the regular food rows on the current track (not the sale extras), each once
+  const foodKinds = () => { const s = []; for (const f of foods) if (!f.extra && s.indexOf(f.kind) < 0) s.push(f.kind); return s; };
 
   // ---------------------------------------------------------------- ❓ item boxes
   // A few rows of 4 floating boxes across the road, between the food rows, clear of the start
@@ -1527,5 +1529,5 @@ window.PK = window.PK || {};
   function giveBox(k, id) { if (!k || !BOX[id]) return false; k.boxItem = id; k.boxRoll = 0; S(k).boxSince = -1; return true; }
   const boxInfo = () => ({ boxes: boxes.length, active: boxes.filter((b) => !(b.t > 0)).length, missiles: missiles.length, rows: boxes.map((b) => b.i) });
   PK.Skills = { DEFS, ITEMS, ITEM_IDS, BOX, BOX_IDS, BOX_ROLL, init, reset, tryUse, useItem, useBox, giveBox, boxWeights, boxInfo, incoming,
-    itemMagnet, startSale, saleLeft, foodIcon, foodName, update, aiWants, sprites };
+    itemMagnet, startSale, saleLeft, foodIcon, foodName, foodKinds, update, aiWants, sprites };
 })(window.PK);
